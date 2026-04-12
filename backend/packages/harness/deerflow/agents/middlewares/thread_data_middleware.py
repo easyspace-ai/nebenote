@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import NotRequired, override
 
@@ -92,8 +93,7 @@ class ThreadDataMiddleware(AgentMiddleware[ThreadDataMiddlewareState]):
         self._paths.ensure_thread_dirs(thread_id)
         return self._get_thread_paths(thread_id)
 
-    @override
-    def before_agent(self, state: ThreadDataMiddlewareState, runtime: Runtime) -> dict | None:
+    def _prepare_thread_data(self, runtime: Runtime) -> dict | None:
         context = runtime.context or {}
         thread_id = context.get("thread_id")
         if thread_id is None:
@@ -116,3 +116,11 @@ class ThreadDataMiddleware(AgentMiddleware[ThreadDataMiddlewareState]):
                 **paths,
             }
         }
+
+    @override
+    def before_agent(self, state: ThreadDataMiddlewareState, runtime: Runtime) -> dict | None:
+        return self._prepare_thread_data(runtime)
+
+    @override
+    async def abefore_agent(self, state: ThreadDataMiddlewareState, runtime: Runtime) -> dict | None:
+        return await asyncio.to_thread(self._prepare_thread_data, runtime)

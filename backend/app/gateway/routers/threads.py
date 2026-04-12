@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 
 from app.gateway.deps import get_checkpointer, get_store
 from deerflow.config.paths import Paths, get_paths
+from deerflow.notebook import get_notebook_manager
 from deerflow.runtime import serialize_channel_values
 
 # ---------------------------------------------------------------------------
@@ -190,6 +191,103 @@ async def _store_upsert(store, thread_id: str, *, metadata: dict | None = None, 
         await _store_put(store, val)
 
 
+async def create_thread_record(
+    request: Request,
+    *,
+    thread_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> ThreadResponse:
+    """Create a thread record in the Store and checkpointer."""
+    store = get_store(request)
+    checkpointer = get_checkpointer(request)
+    resolved_thread_id = thread_id or str(uuid.uuid4())
+    now = time.time()
+    metadata = metadata or {}
+
+    if store is not None:
+        existing_record = await _store_get(store, resolved_thread_id)
+        if existing_record is not None:
+            return ThreadResponse(
+                thread_id=resolved_thread_id,
+                status=existing_record.get("status", "idle"),
+                created_at=str(existing_record.get("created_at", "")),
+                updated_at=str(existing_record.get("updated_at", "")),
+                metadata=existing_record.get("metadata", {}),
+            )
+
+    if store is not None:
+        try:
+            await _store_put(
+                store,
+                {
+                    "thread_id": resolved_thread_id,
+                    "status": "idle",
+                    "created_at": now,
+                    "updated_at": now,
+                    "metadata": metadata,
+                },
+            )
+        except Exception:
+            logger.exception("Failed to write thread %s to store", resolved_thread_id)
+            raise HTTPException(status_code=500, detail="Failed to create thread")
+
+    config = {"configurable": {"thread_id": resolved_thread_id, "checkpoint_ns": ""}}
+    try:
+        from langgraph.checkpoint.base import empty_checkpoint
+
+        ckpt_metadata = {
+            "step": -1,
+            "source": "input",
+            "writes": None,
+            "parents": {},
+            **metadata,
+            "created_at": now,
+        }
+        await checkpointer.aput(config, empty_checkpoint(), ckpt_metadata, {})
+    except Exception:
+        logger.exception("Failed to create checkpoint for thread %s", resolved_thread_id)
+        raise HTTPException(status_code=500, detail="Failed to create thread")
+
+    logger.info("Thread created: %s", resolved_thread_id)
+    return ThreadResponse(
+        thread_id=resolved_thread_id,
+        status="idle",
+        created_at=str(now),
+        updated_at=str(now),
+        metadata=metadata,
+    )
+
+
+async def _ensure_notebook_thread_record(
+    request: Request,
+    thread_id: str,
+) -> tuple[dict | None, Any | None]:
+    """Materialize legacy notebook threads that were tracked without a real record."""
+    store = get_store(request)
+    checkpointer = get_checkpointer(request)
+
+    record = await _store_get(store, thread_id) if store is not None else None
+    config = {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}
+    checkpoint_tuple = await checkpointer.aget_tuple(config)
+
+    if record is not None or checkpoint_tuple is not None:
+        return record, checkpoint_tuple
+
+    notebook = get_notebook_manager().get_notebook_for_thread(thread_id)
+    if notebook is None:
+        return None, None
+
+    await create_thread_record(
+        request,
+        thread_id=thread_id,
+        metadata={"notebook_id": notebook.notebook_id},
+    )
+
+    record = await _store_get(store, thread_id) if store is not None else None
+    checkpoint_tuple = await checkpointer.aget_tuple(config)
+    return record, checkpoint_tuple
+
+
 def _derive_thread_status(checkpoint_tuple) -> str:
     """Derive thread status from checkpoint metadata."""
     if checkpoint_tuple is None:
@@ -252,64 +350,9 @@ async def create_thread(body: ThreadCreateRequest, request: Request) -> ThreadRe
     empty checkpoint is written to the checkpointer (for state reads).
     Idempotent: returns the existing record when ``thread_id`` already exists.
     """
-    store = get_store(request)
-    checkpointer = get_checkpointer(request)
-    thread_id = body.thread_id or str(uuid.uuid4())
-    now = time.time()
-
-    # Idempotency: return existing record from Store when already present
-    if store is not None:
-        existing_record = await _store_get(store, thread_id)
-        if existing_record is not None:
-            return ThreadResponse(
-                thread_id=thread_id,
-                status=existing_record.get("status", "idle"),
-                created_at=str(existing_record.get("created_at", "")),
-                updated_at=str(existing_record.get("updated_at", "")),
-                metadata=existing_record.get("metadata", {}),
-            )
-
-    # Write thread record to Store
-    if store is not None:
-        try:
-            await _store_put(
-                store,
-                {
-                    "thread_id": thread_id,
-                    "status": "idle",
-                    "created_at": now,
-                    "updated_at": now,
-                    "metadata": body.metadata,
-                },
-            )
-        except Exception:
-            logger.exception("Failed to write thread %s to store", thread_id)
-            raise HTTPException(status_code=500, detail="Failed to create thread")
-
-    # Write an empty checkpoint so state endpoints work immediately
-    config = {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}
-    try:
-        from langgraph.checkpoint.base import empty_checkpoint
-
-        ckpt_metadata = {
-            "step": -1,
-            "source": "input",
-            "writes": None,
-            "parents": {},
-            **body.metadata,
-            "created_at": now,
-        }
-        await checkpointer.aput(config, empty_checkpoint(), ckpt_metadata, {})
-    except Exception:
-        logger.exception("Failed to create checkpoint for thread %s", thread_id)
-        raise HTTPException(status_code=500, detail="Failed to create thread")
-
-    logger.info("Thread created: %s", thread_id)
-    return ThreadResponse(
-        thread_id=thread_id,
-        status="idle",
-        created_at=str(now),
-        updated_at=str(now),
+    return await create_thread_record(
+        request,
+        thread_id=body.thread_id,
         metadata=body.metadata,
     )
 
@@ -426,7 +469,7 @@ async def patch_thread(thread_id: str, body: ThreadPatchRequest, request: Reques
     if store is None:
         raise HTTPException(status_code=503, detail="Store not available")
 
-    record = await _store_get(store, thread_id)
+    record, _ = await _ensure_notebook_thread_record(request, thread_id)
     if record is None:
         raise HTTPException(status_code=404, detail=f"Thread {thread_id} not found")
 
@@ -461,14 +504,8 @@ async def get_thread(thread_id: str, request: Request) -> ThreadResponse:
     store = get_store(request)
     checkpointer = get_checkpointer(request)
 
-    record: dict | None = None
-    if store is not None:
-        record = await _store_get(store, thread_id)
-
-    # Derive accurate status from the checkpointer
-    config = {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}
     try:
-        checkpoint_tuple = await checkpointer.aget_tuple(config)
+        record, checkpoint_tuple = await _ensure_notebook_thread_record(request, thread_id)
     except Exception:
         logger.exception("Failed to get checkpoint for thread %s", thread_id)
         raise HTTPException(status_code=500, detail="Failed to get thread")
@@ -512,11 +549,8 @@ async def get_thread_state(thread_id: str, request: Request) -> ThreadStateRespo
     Channel values are serialized to ensure LangChain message objects
     are converted to JSON-safe dicts.
     """
-    checkpointer = get_checkpointer(request)
-
-    config = {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}
     try:
-        checkpoint_tuple = await checkpointer.aget_tuple(config)
+        _, checkpoint_tuple = await _ensure_notebook_thread_record(request, thread_id)
     except Exception:
         logger.exception("Failed to get state for thread %s", thread_id)
         raise HTTPException(status_code=500, detail="Failed to get thread state")
@@ -564,6 +598,15 @@ async def update_thread_state(thread_id: str, body: ThreadStateUpdateRequest, re
     """
     checkpointer = get_checkpointer(request)
     store = get_store(request)
+
+    try:
+        _, existing_checkpoint_tuple = await _ensure_notebook_thread_record(request, thread_id)
+    except Exception:
+        logger.exception("Failed to initialize thread state for thread %s", thread_id)
+        raise HTTPException(status_code=500, detail="Failed to get thread state")
+
+    if existing_checkpoint_tuple is None:
+        raise HTTPException(status_code=404, detail=f"Thread {thread_id} not found")
 
     # checkpoint_ns must be present in the config for aput — default to ""
     # (the root graph namespace).  checkpoint_id is optional; omitting it
@@ -641,6 +684,15 @@ async def update_thread_state(thread_id: str, body: ThreadStateUpdateRequest, re
 async def get_thread_history(thread_id: str, body: ThreadHistoryRequest, request: Request) -> list[HistoryEntry]:
     """Get checkpoint history for a thread."""
     checkpointer = get_checkpointer(request)
+
+    try:
+        _, checkpoint_tuple = await _ensure_notebook_thread_record(request, thread_id)
+    except Exception:
+        logger.exception("Failed to initialize history for thread %s", thread_id)
+        raise HTTPException(status_code=500, detail="Failed to get thread history")
+
+    if checkpoint_tuple is None:
+        raise HTTPException(status_code=404, detail=f"Thread {thread_id} not found")
 
     config: dict[str, Any] = {"configurable": {"thread_id": thread_id}}
     if body.before:

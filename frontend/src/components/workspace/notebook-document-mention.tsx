@@ -13,34 +13,27 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { useNotebooks, useDocuments } from "@/core/notebook/hooks";
+import { useDocuments, useNotebook } from "@/core/notebook/hooks";
 import type { Document } from "@/core/notebook/types";
 import { cn } from "@/lib/utils";
 
 interface NotebookDocumentMentionProps {
   onSelectDocument: (doc: Document, notebookId: string) => void;
+  notebookId?: string;
   disabled?: boolean;
 }
 
 export function NotebookDocumentMention({
   onSelectDocument,
+  notebookId,
   disabled,
 }: NotebookDocumentMentionProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const { data: notebooks, isLoading: isLoadingNotebooks } = useNotebooks();
-
-  // Select the first notebook by default
-  const defaultNotebook = useMemo(() => {
-    if (!notebooks || notebooks.length === 0) return null;
-    return notebooks[0];
-  }, [notebooks]);
-
-  const { data: documents, isLoading: isLoadingDocuments } = useDocuments(
-    defaultNotebook?.notebook_id
-  );
+  const { data: notebook } = useNotebook(notebookId);
+  const { data: documents, isLoading: isLoadingDocuments } = useDocuments(notebookId);
 
   // Filter documents based on search
   const filteredDocuments = useMemo(() => {
@@ -57,13 +50,13 @@ export function NotebookDocumentMention({
 
   const handleSelect = useCallback(
     (doc: Document) => {
-      if (defaultNotebook) {
-        onSelectDocument(doc, defaultNotebook.notebook_id);
+      if (notebookId) {
+        onSelectDocument(doc, notebookId);
       }
       setOpen(false);
       setSearch("");
     },
-    [defaultNotebook, onSelectDocument]
+    [notebookId, onSelectDocument]
   );
 
   // Reset search when opening
@@ -81,7 +74,7 @@ export function NotebookDocumentMention({
       <Button
         variant="ghost"
         size="icon-sm"
-        disabled={disabled ?? !defaultNotebook}
+        disabled={disabled ?? !notebookId}
         className="hover:bg-accent/50"
         onClick={() => setOpen(true)}
       >
@@ -101,12 +94,10 @@ export function NotebookDocumentMention({
         />
         <CommandList>
           <CommandEmpty>
-            {isLoadingNotebooks || isLoadingDocuments
-              ? "加载中..."
-              : "未找到文档"}
+            {isLoadingDocuments ? "加载中..." : "未找到文档"}
           </CommandEmpty>
-          {defaultNotebook && (
-            <CommandGroup heading={`笔记本: ${defaultNotebook.title}`}>
+          {notebookId && (
+            <CommandGroup heading={`笔记本: ${notebook?.title ?? "当前笔记本"}`}>
               {filteredDocuments.map((doc) => (
                 <CommandItem
                   key={doc.doc_id}

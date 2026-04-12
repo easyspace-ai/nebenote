@@ -6,7 +6,11 @@ import { useEffect, useState } from "react";
 import { uuid } from "@/core/utils/uuid";
 
 export function useThreadChat() {
-  const { thread_id: threadIdFromPath } = useParams<{ thread_id: string }>();
+  const params = useParams<{
+    thread_id?: string;
+    threadId?: string;
+  }>();
+  const threadIdFromPath = params.thread_id ?? params.threadId ?? "new";
   const pathname = usePathname();
 
   const searchParams = useSearchParams();

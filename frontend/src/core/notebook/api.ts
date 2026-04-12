@@ -133,21 +133,27 @@ export async function createThread(
   title?: string
 ): Promise<{ thread_id: string }> {
   const params = title ? `?title=${encodeURIComponent(title)}` : '';
-  const result = await fetchJson(`${API_BASE}/${notebookId}/threads${params}`, {
-    method: 'POST',
-  });
 
-  // Save notebook_id to thread metadata
+  const thread = await getAPIClient().threads.create();
+
   try {
-    await getAPIClient().threads.update(result.thread_id, {
+    await getAPIClient().threads.update(thread.thread_id, {
       metadata: { notebook_id: notebookId },
     });
   } catch (error) {
-    console.error('Failed to update thread metadata with notebook_id:', error);
-    // Don't fail the whole operation if metadata update fails
+    throw new Error(
+      `Failed to attach notebook context to thread ${thread.thread_id}: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
   }
 
-  return result;
+  return fetchJson(
+    `${API_BASE}/${notebookId}/threads${params}${params ? '&' : '?'}thread_id=${encodeURIComponent(thread.thread_id)}`,
+    {
+      method: 'POST',
+    }
+  );
 }
 
 export async function listThreads(

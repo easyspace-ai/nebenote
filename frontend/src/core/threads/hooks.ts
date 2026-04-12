@@ -25,6 +25,7 @@ export type ToolEndEvent = {
 
 export type ThreadStreamOptions = {
   threadId?: string | null | undefined;
+  notebookId?: string;
   context: LocalSettings["context"];
   isMock?: boolean;
   onStart?: (threadId: string) => void;
@@ -136,6 +137,7 @@ function getStreamErrorMessage(error: unknown): string {
 
 export function useThreadStream({
   threadId,
+  notebookId: notebookIdFromPage,
   context,
   isMock,
   onStart,
@@ -461,7 +463,7 @@ export function useThreadStream({
         );
 
         // Get notebook_id from thread metadata if available
-        const notebookId = thread.metadata?.notebook_id as string | undefined;
+        const notebookId = notebookIdFromPage;
 
         await thread.submit(
           {
@@ -489,7 +491,6 @@ export function useThreadStream({
             streamResumable: true,
             config: {
               recursion_limit: 1000,
-              configurable: notebookId ? { notebook_id: notebookId } : undefined,
             },
             context: {
               ...extraContext,
@@ -520,7 +521,14 @@ export function useThreadStream({
         sendInFlightRef.current = false;
       }
     },
-    [thread, _handleOnStart, t.uploads.uploadingFiles, context, queryClient],
+    [
+      thread,
+      _handleOnStart,
+      t.uploads.uploadingFiles,
+      context,
+      notebookIdFromPage,
+      queryClient,
+    ],
   );
 
   // Merge thread with optimistic messages for display

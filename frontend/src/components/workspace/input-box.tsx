@@ -109,6 +109,7 @@ export function InputBox({
   extraHeader,
   isNewThread,
   threadId,
+  notebookId,
   initialValue,
   onContextChange,
   onFollowupsVisibilityChange,
@@ -129,6 +130,7 @@ export function InputBox({
   extraHeader?: React.ReactNode;
   isNewThread?: boolean;
   threadId: string;
+  notebookId?: string;
   initialValue?: string;
   onContextChange?: (
     context: Omit<
@@ -517,6 +519,7 @@ export function InputBox({
             <AddAttachmentsButton className="px-2!" />
             <NotebookDocumentMention
               onSelectDocument={handleSelectDocument}
+              notebookId={notebookId}
               disabled={disabled}
             />
             <PromptInputActionMenu>

@@ -4,9 +4,10 @@ import logging
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
+from app.gateway.routers.threads import create_thread_record
 from deerflow.notebook import (
     Document,
     Notebook,
@@ -219,11 +220,26 @@ async def get_document_content(notebook_id: str, doc_id: str):
 # == Thread Endpoints ==
 
 @router.post("/{notebook_id}/threads", response_model=ThreadCreateResponse)
-async def create_thread(notebook_id: str, title: str | None = None, thread_id: str | None = None):
+async def create_thread(
+    notebook_id: str,
+    request: Request,
+    title: str | None = None,
+    thread_id: str | None = None,
+):
     """Create a new chat thread in a notebook."""
     try:
-        thread_id = _manager().create_thread(notebook_id, title=title, thread_id_override=thread_id)
-        return {"thread_id": thread_id}
+        _manager().get_notebook(notebook_id)
+        created_thread = await create_thread_record(
+            request,
+            thread_id=thread_id,
+            metadata={"notebook_id": notebook_id},
+        )
+        tracked_thread_id = _manager().create_thread(
+            notebook_id,
+            title=title,
+            thread_id_override=created_thread.thread_id,
+        )
+        return {"thread_id": tracked_thread_id}
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Notebook not found")
 

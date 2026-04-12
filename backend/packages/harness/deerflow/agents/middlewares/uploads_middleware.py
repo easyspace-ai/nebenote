@@ -1,5 +1,6 @@
 """Middleware to inject uploaded files information into agent context."""
 
+import asyncio
 import logging
 from pathlib import Path
 from typing import NotRequired, override
@@ -183,8 +184,11 @@ class UploadsMiddleware(AgentMiddleware[UploadsMiddlewareState]):
             )
         return files if files else None
 
-    @override
-    def before_agent(self, state: UploadsMiddlewareState, runtime: Runtime) -> dict | None:
+    def _prepare_uploads_context(
+        self,
+        state: UploadsMiddlewareState,
+        runtime: Runtime,
+    ) -> dict | None:
         """Inject uploaded files information before agent execution.
 
         New files come from the current message's additional_kwargs.files.
@@ -291,3 +295,11 @@ class UploadsMiddleware(AgentMiddleware[UploadsMiddlewareState]):
             "uploaded_files": new_files,
             "messages": messages,
         }
+
+    @override
+    def before_agent(self, state: UploadsMiddlewareState, runtime: Runtime) -> dict | None:
+        return self._prepare_uploads_context(state, runtime)
+
+    @override
+    async def abefore_agent(self, state: UploadsMiddlewareState, runtime: Runtime) -> dict | None:
+        return await asyncio.to_thread(self._prepare_uploads_context, state, runtime)

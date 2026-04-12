@@ -1,5 +1,6 @@
 """Notebook Middleware - handles @document references in chat."""
 
+import asyncio
 import logging
 import re
 from typing import Any, NotRequired, override
@@ -139,8 +140,11 @@ class NotebookMiddleware(AgentMiddleware[NotebookMiddlewareState]):
             f"{context}"
         )
 
-    @override
-    def before_agent(self, state: NotebookMiddlewareState, runtime: Runtime) -> dict | None:
+    def _prepare_context(
+        self,
+        state: NotebookMiddlewareState,
+        runtime: Runtime,
+    ) -> dict | None:
         """Inject document context before agent execution.
 
         Args:
@@ -277,3 +281,11 @@ class NotebookMiddleware(AgentMiddleware[NotebookMiddlewareState]):
             "notebook_id": notebook_id,
             "messages": messages,
         }
+
+    @override
+    def before_agent(self, state: NotebookMiddlewareState, runtime: Runtime) -> dict | None:
+        return self._prepare_context(state, runtime)
+
+    @override
+    async def abefore_agent(self, state: NotebookMiddlewareState, runtime: Runtime) -> dict | None:
+        return await asyncio.to_thread(self._prepare_context, state, runtime)

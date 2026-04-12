@@ -49,6 +49,7 @@ export default function NotebookChatPage() {
 
   const [thread, sendMessage, isUploading] = useThreadStream({
     threadId: isNewThread ? undefined : threadId,
+    notebookId,
     context: settings.context,
     isMock,
     onStart: (createdThreadId) => {
@@ -146,6 +147,7 @@ export default function NotebookChatPage() {
                     className={cn("bg-background/5 w-full -translate-y-4")}
                     isNewThread={isNewThread}
                     threadId={threadId}
+                    notebookId={notebookId}
                     autoFocus={isNewThread}
                     status={
                       thread.error

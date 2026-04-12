@@ -1,4 +1,5 @@
 from unittest.mock import patch
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -6,6 +7,78 @@ from fastapi.testclient import TestClient
 
 from app.gateway.routers import threads
 from deerflow.config.paths import Paths
+from deerflow.notebook.manager import NotebookManager
+
+
+class InMemoryStore:
+    def __init__(self):
+        self.records = {}
+
+    async def aget(self, namespace, key):
+        value = self.records.get((tuple(namespace), key))
+        if value is None:
+            return None
+        return SimpleNamespace(value=value)
+
+    async def aput(self, namespace, key, value):
+        self.records[(tuple(namespace), key)] = value
+
+    async def adelete(self, namespace, key):
+        self.records.pop((tuple(namespace), key), None)
+
+
+class FakeCheckpointTuple:
+    def __init__(self, thread_id, checkpoint, metadata, checkpoint_id="checkpoint-1"):
+        self.config = {
+            "configurable": {
+                "thread_id": thread_id,
+                "checkpoint_ns": "",
+                "checkpoint_id": checkpoint_id,
+            }
+        }
+        self.parent_config = None
+        self.checkpoint = checkpoint
+        self.metadata = metadata
+        self.tasks = []
+        self.pending_writes = []
+
+
+class InMemoryCheckpointer:
+    def __init__(self):
+        self.records = {}
+
+    async def aget_tuple(self, config):
+        thread_id = config.get("configurable", {}).get("thread_id")
+        return self.records.get(thread_id)
+
+    async def aput(self, config, checkpoint, metadata, _writes):
+        thread_id = config["configurable"]["thread_id"]
+        checkpoint_id = f"checkpoint-{len(self.records) + 1}"
+        self.records[thread_id] = FakeCheckpointTuple(
+            thread_id=thread_id,
+            checkpoint=checkpoint,
+            metadata=metadata,
+            checkpoint_id=checkpoint_id,
+        )
+        return {
+            "configurable": {
+                "thread_id": thread_id,
+                "checkpoint_ns": "",
+                "checkpoint_id": checkpoint_id,
+            }
+        }
+
+    async def alist(self, config=None, limit=10):
+        thread_id = None
+        if config:
+            thread_id = config.get("configurable", {}).get("thread_id")
+
+        records = list(self.records.values())
+        if thread_id is not None:
+            records = [record for record in records if record.config["configurable"]["thread_id"] == thread_id]
+
+        for record in records[:limit]:
+            yield record
 
 
 def test_delete_thread_data_removes_thread_directory(tmp_path):
@@ -107,3 +180,32 @@ def test_delete_thread_data_returns_generic_500_error(tmp_path):
     assert exc_info.value.detail == "Failed to delete local thread data."
     assert "/secret/path" not in exc_info.value.detail
     log_exception.assert_called_once_with("Failed to delete thread data for %s", "thread-cleanup")
+
+
+def test_history_route_materializes_legacy_notebook_thread(tmp_path):
+    app = FastAPI()
+    app.include_router(threads.router)
+    app.state.store = InMemoryStore()
+    app.state.checkpointer = InMemoryCheckpointer()
+
+    notebook_manager = NotebookManager()
+    notebook_manager.paths = notebook_manager.paths.__class__(tmp_path)
+    notebook = notebook_manager.create_notebook(title="Notebook")
+    legacy_thread_id = notebook_manager.create_thread(notebook.notebook_id, thread_id_override="legacy-thread")
+
+    with (
+        patch("app.gateway.routers.threads.get_notebook_manager", return_value=notebook_manager),
+        TestClient(app) as client,
+    ):
+        response = client.post(
+            f"/api/threads/{legacy_thread_id}/history",
+            json={"limit": 10},
+        )
+
+    assert response.status_code == 200
+    history = response.json()
+    assert len(history) == 1
+    assert history[0]["metadata"]["notebook_id"] == notebook.notebook_id
+
+    record = app.state.store.records[(("threads",), legacy_thread_id)]
+    assert record["metadata"]["notebook_id"] == notebook.notebook_id
