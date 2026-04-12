@@ -12,7 +12,7 @@ export default function NotebookIdLayout({
   const { setOpen } = useSidebar();
 
   useEffect(() => {
-    setOpen(false);
+    setOpen(true);
   }, [setOpen]);
 
   return (

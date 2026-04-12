@@ -2,7 +2,7 @@
 
 import { MessageSquarePlus } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { useParams, usePathname } from "next/navigation";
 
 import {
   SidebarMenu,
@@ -19,6 +19,13 @@ export function WorkspaceHeader({ className }: { className?: string }) {
   const { t } = useI18n();
   const { state } = useSidebar();
   const pathname = usePathname();
+  const params = useParams<{ notebookId?: string }>();
+  const isNotebookRoute =
+    Boolean(params.notebookId) && pathname.includes("/workspace/notebooks/");
+  const newChatHref = isNotebookRoute
+    ? `/workspace/notebooks/${params.notebookId}/chats`
+    : "/workspace/chats/new";
+
   return (
     <>
       <div
@@ -52,10 +59,10 @@ export function WorkspaceHeader({ className }: { className?: string }) {
       <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuButton
-            isActive={pathname === "/workspace/chats/new"}
+            isActive={pathname === newChatHref}
             asChild
           >
-            <Link className="text-muted-foreground" href="/workspace/chats/new">
+            <Link className="text-muted-foreground" href={newChatHref}>
               <MessageSquarePlus size={16} />
               <span>{t.sidebar.newChat}</span>
             </Link>
