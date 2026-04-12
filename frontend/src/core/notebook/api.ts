@@ -1,0 +1,157 @@
+// API client for Notebook operations
+
+import { getAPIClient } from '@/core/api';
+
+import type {
+  Notebook,
+  Document,
+  CreateNotebookRequest,
+  UpdateNotebookRequest,
+  ProcessingStatusResponse,
+} from './types';
+
+const API_BASE = '/api/notebooks';
+
+async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(url, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...options?.headers,
+    },
+    ...options,
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`API Error: ${response.status} - ${error}`);
+  }
+
+  return response.json();
+}
+
+// === Notebook API ===
+
+export async function createNotebook(
+  data: CreateNotebookRequest
+): Promise<{ notebook: Notebook }> {
+  return fetchJson(API_BASE, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function listNotebooks(): Promise<{ notebooks: Notebook[] }> {
+  return fetchJson(API_BASE);
+}
+
+export async function getNotebook(notebookId: string): Promise<{ notebook: Notebook }> {
+  return fetchJson(`${API_BASE}/${notebookId}`);
+}
+
+export async function updateNotebook(
+  notebookId: string,
+  data: UpdateNotebookRequest
+): Promise<{ notebook: Notebook }> {
+  return fetchJson(`${API_BASE}/${notebookId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteNotebook(notebookId: string): Promise<{ success: boolean; message: string }> {
+  return fetchJson(`${API_BASE}/${notebookId}`, {
+    method: 'DELETE',
+  });
+}
+
+// === Document API ===
+
+export async function uploadDocument(
+  notebookId: string,
+  file: File,
+  title?: string
+): Promise<{ document: Document }> {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (title) {
+    formData.append('title', title);
+  }
+
+  const response = await fetch(`${API_BASE}/${notebookId}/documents`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Upload failed: ${response.status} - ${error}`);
+  }
+
+  return response.json();
+}
+
+export async function listDocuments(
+  notebookId: string
+): Promise<{ documents: Document[] }> {
+  return fetchJson(`${API_BASE}/${notebookId}/documents`);
+}
+
+export async function getDocument(
+  notebookId: string,
+  docId: string
+): Promise<{ document: Document }> {
+  return fetchJson(`${API_BASE}/${notebookId}/documents/${docId}`);
+}
+
+export async function deleteDocument(
+  notebookId: string,
+  docId: string
+): Promise<{ success: boolean; message: string }> {
+  return fetchJson(`${API_BASE}/${notebookId}/documents/${docId}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function getDocumentProcessingStatus(
+  notebookId: string,
+  docId: string
+): Promise<ProcessingStatusResponse> {
+  return fetchJson(`${API_BASE}/${notebookId}/documents/${docId}/status`);
+}
+
+export async function getDocumentContent(
+  notebookId: string,
+  docId: string
+): Promise<{ content: string }> {
+  return fetchJson(`${API_BASE}/${notebookId}/documents/${docId}/content`);
+}
+
+// === Thread API ===
+
+export async function createThread(
+  notebookId: string,
+  title?: string
+): Promise<{ thread_id: string }> {
+  const params = title ? `?title=${encodeURIComponent(title)}` : '';
+  const result = await fetchJson(`${API_BASE}/${notebookId}/threads${params}`, {
+    method: 'POST',
+  });
+
+  // Save notebook_id to thread metadata
+  try {
+    await getAPIClient().threads.update(result.thread_id, {
+      metadata: { notebook_id: notebookId },
+    });
+  } catch (error) {
+    console.error('Failed to update thread metadata with notebook_id:', error);
+    // Don't fail the whole operation if metadata update fails
+  }
+
+  return result;
+}
+
+export async function listThreads(
+  notebookId: string
+): Promise<{ thread_ids: string[] }> {
+  return fetchJson(`${API_BASE}/${notebookId}/threads`);
+}
