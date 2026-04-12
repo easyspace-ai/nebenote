@@ -11,8 +11,12 @@ export default function NotebookChatLayout({
 }) {
   return (
     <SubtasksProvider>
-      <ArtifactsProvider>
-        <PromptInputProvider>{children}</PromptInputProvider>
+      <ArtifactsProvider defaultOpen>
+        <PromptInputProvider>
+          <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+            {children}
+          </div>
+        </PromptInputProvider>
       </ArtifactsProvider>
     </SubtasksProvider>
   );

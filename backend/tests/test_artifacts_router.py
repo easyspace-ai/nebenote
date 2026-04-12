@@ -1,6 +1,7 @@
 import asyncio
 import zipfile
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import FastAPI
@@ -9,6 +10,17 @@ from starlette.requests import Request
 from starlette.responses import FileResponse
 
 import app.gateway.routers.artifacts as artifacts_router
+from app.gateway.routers.auth import User, get_current_user
+
+
+def _test_user() -> User:
+    return User(
+        id="u1",
+        email="u1@test",
+        password_hash="x",
+        created_at="2020-01-01T00:00:00+00:00",
+        updated_at="2020-01-01T00:00:00+00:00",
+    )
 
 ACTIVE_ARTIFACT_CASES = [
     ("poc.html", "<html><body><script>alert('xss')</script></body></html>"),
@@ -34,9 +46,12 @@ def test_get_artifact_reads_utf8_text_file_on_windows_locale(tmp_path, monkeypat
 
     monkeypatch.setattr(Path, "read_text", read_text_with_gbk_default)
     monkeypatch.setattr(artifacts_router, "resolve_thread_virtual_path", lambda _thread_id, _path: artifact_path)
+    monkeypatch.setattr(artifacts_router, "require_thread_access", AsyncMock())
 
     request = _make_request()
-    response = asyncio.run(artifacts_router.get_artifact("thread-1", "mnt/user-data/outputs/note.txt", request))
+    response = asyncio.run(
+        artifacts_router.get_artifact("thread-1", "mnt/user-data/outputs/note.txt", request, _test_user())
+    )
 
     assert bytes(response.body).decode("utf-8") == text
     assert response.media_type == "text/plain"
@@ -48,8 +63,13 @@ def test_get_artifact_forces_download_for_active_content(tmp_path, monkeypatch, 
     artifact_path.write_text(content, encoding="utf-8")
 
     monkeypatch.setattr(artifacts_router, "resolve_thread_virtual_path", lambda _thread_id, _path: artifact_path)
+    monkeypatch.setattr(artifacts_router, "require_thread_access", AsyncMock())
 
-    response = asyncio.run(artifacts_router.get_artifact("thread-1", f"mnt/user-data/outputs/{filename}", _make_request()))
+    response = asyncio.run(
+        artifacts_router.get_artifact(
+            "thread-1", f"mnt/user-data/outputs/{filename}", _make_request(), _test_user()
+        )
+    )
 
     assert isinstance(response, FileResponse)
     assert response.headers.get("content-disposition", "").startswith("attachment;")
@@ -62,8 +82,16 @@ def test_get_artifact_forces_download_for_active_content_in_skill_archive(tmp_pa
         zip_ref.writestr(filename, content)
 
     monkeypatch.setattr(artifacts_router, "resolve_thread_virtual_path", lambda _thread_id, _path: skill_path)
+    monkeypatch.setattr(artifacts_router, "require_thread_access", AsyncMock())
 
-    response = asyncio.run(artifacts_router.get_artifact("thread-1", f"mnt/user-data/outputs/sample.skill/{filename}", _make_request()))
+    response = asyncio.run(
+        artifacts_router.get_artifact(
+            "thread-1",
+            f"mnt/user-data/outputs/sample.skill/{filename}",
+            _make_request(),
+            _test_user(),
+        )
+    )
 
     assert response.headers.get("content-disposition", "").startswith("attachment;")
     assert bytes(response.body) == content.encode("utf-8")
@@ -74,13 +102,16 @@ def test_get_artifact_download_false_does_not_force_attachment(tmp_path, monkeyp
     artifact_path.write_text("hello", encoding="utf-8")
 
     monkeypatch.setattr(artifacts_router, "resolve_thread_virtual_path", lambda _thread_id, _path: artifact_path)
+    monkeypatch.setattr(artifacts_router, "require_thread_access", AsyncMock())
 
     app = FastAPI()
     app.include_router(artifacts_router.router)
+    app.dependency_overrides[get_current_user] = lambda: _test_user()
 
     with TestClient(app) as client:
         response = client.get("/api/threads/thread-1/artifacts/mnt/user-data/outputs/note.txt?download=false")
 
+    app.dependency_overrides.clear()
     assert response.status_code == 200
     assert response.text == "hello"
     assert "content-disposition" not in response.headers
@@ -92,13 +123,16 @@ def test_get_artifact_download_true_forces_attachment_for_skill_archive(tmp_path
         zip_ref.writestr("notes.txt", "hello")
 
     monkeypatch.setattr(artifacts_router, "resolve_thread_virtual_path", lambda _thread_id, _path: skill_path)
+    monkeypatch.setattr(artifacts_router, "require_thread_access", AsyncMock())
 
     app = FastAPI()
     app.include_router(artifacts_router.router)
+    app.dependency_overrides[get_current_user] = lambda: _test_user()
 
     with TestClient(app) as client:
         response = client.get("/api/threads/thread-1/artifacts/mnt/user-data/outputs/sample.skill/notes.txt?download=true")
 
+    app.dependency_overrides.clear()
     assert response.status_code == 200
     assert response.text == "hello"
     assert response.headers.get("content-disposition", "").startswith("attachment;")

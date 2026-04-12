@@ -41,6 +41,9 @@ class Document(BaseModel):
     error_message: str | None = None
     outline: list[OutlineItem] = Field(default_factory=list)
     stats: DocumentStats = Field(default_factory=DocumentStats)
+    # Symlink names under user-data/uploads/ → documents/... (Skills use /mnt/user-data/uploads/)
+    uploads_mirror_original: str | None = None
+    uploads_mirror_markdown: str | None = None
 
     @property
     def is_ready(self) -> bool:
@@ -63,11 +66,15 @@ class NotebookSettings(BaseModel):
     auto_summarize: bool = True
     max_chunk_size: int = 1000
     chunk_overlap: int = 200
+    archived: bool = False
+    # Thread used for notebook library uploads (same pipeline as POST /api/threads/{id}/uploads).
+    upload_thread_id: str | None = None
 
 
 class Notebook(BaseModel):
     """A notebook containing multiple documents and chat threads."""
     notebook_id: str
+    owner_id: str | None = None
     title: str
     description: str | None = None
     tags: list[str] = Field(default_factory=list)

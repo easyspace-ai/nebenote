@@ -10,6 +10,7 @@ from app.gateway.routers import (
     agents,
     artifacts,
     assistants_compat,
+    auth,
     channels,
     mcp,
     memory,
@@ -203,6 +204,9 @@ This gateway provides custom endpoints for models, MCP configuration, skills, an
 
     # Notebooks API is mounted at /api/notebooks
     app.include_router(notebooks.router)
+
+    # Auth API is mounted at /api/auth
+    app.include_router(auth.router)
 
     # Assistants compatibility API (LangGraph Platform stub)
     app.include_router(assistants_compat.router)

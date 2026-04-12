@@ -45,6 +45,14 @@ const config = {
 
     if (!process.env.NEXT_PUBLIC_BACKEND_BASE_URL) {
       rewrites.push({
+        source: "/api/auth",
+        destination: `${gatewayURL}/api/auth`,
+      });
+      rewrites.push({
+        source: "/api/auth/:path*",
+        destination: `${gatewayURL}/api/auth/:path*`,
+      });
+      rewrites.push({
         source: "/api/agents",
         destination: `${gatewayURL}/api/agents`,
       });

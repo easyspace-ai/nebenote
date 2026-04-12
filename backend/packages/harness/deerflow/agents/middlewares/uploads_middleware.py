@@ -11,6 +11,7 @@ from langchain_core.messages import HumanMessage
 from langgraph.runtime import Runtime
 
 from deerflow.config.paths import Paths, get_paths
+from deerflow.notebook import get_notebook_manager
 from deerflow.utils.file_conversion import extract_outline
 
 logger = logging.getLogger(__name__)
@@ -81,6 +82,17 @@ class UploadsMiddleware(AgentMiddleware[UploadsMiddlewareState]):
         """
         super().__init__()
         self._paths = Paths(base_dir) if base_dir else get_paths()
+
+    def _resolve_uploads_dir(self, thread_id: str | None) -> Path | None:
+        """Physical uploads directory (notebook-shared or per-thread)."""
+        if not thread_id:
+            return None
+        nb_manager = get_notebook_manager()
+        notebook = nb_manager.get_notebook_for_thread(thread_id)
+        if notebook:
+            nb_manager.paths.ensure_notebook_dirs(notebook.notebook_id)
+            return nb_manager.paths.uploads_dir(notebook.notebook_id)
+        return self._paths.sandbox_uploads_dir(thread_id)
 
     def _format_file_entry(self, file: dict, lines: list[str]) -> None:
         """Append a single file entry (name, size, path, optional outline) to lines."""
@@ -225,7 +237,7 @@ class UploadsMiddleware(AgentMiddleware[UploadsMiddlewareState]):
                 thread_id = get_config().get("configurable", {}).get("thread_id")
             except RuntimeError:
                 pass  # get_config() raises outside a runnable context (e.g. unit tests)
-        uploads_dir = self._paths.sandbox_uploads_dir(thread_id) if thread_id else None
+        uploads_dir = self._resolve_uploads_dir(thread_id)
 
         # Get newly uploaded files from the current message's additional_kwargs.files
         new_files = self._files_from_kwargs(last_message, uploads_dir) or []

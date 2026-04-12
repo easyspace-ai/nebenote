@@ -34,6 +34,8 @@ export interface NotebookSettings {
   auto_summarize: boolean;
   max_chunk_size: number;
   chunk_overlap: number;
+  /** Dedicated thread for notebook library uploads (shared user-data/uploads pipeline). */
+  upload_thread_id?: string | null;
 }
 
 export interface Notebook {

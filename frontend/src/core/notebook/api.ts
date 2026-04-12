@@ -12,13 +12,28 @@ import type {
 
 const API_BASE = '/api/notebooks';
 
+/** Same key as `lib/api/client.ts` / `useAuth` — gateway `get_current_user` expects Bearer. */
+const TOKEN_STORAGE_KEY = 'deerflow_token';
+
+function bearerHeaders(): Record<string, string> {
+  if (typeof window === 'undefined') {
+    return {};
+  }
+  const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+  if (!token) {
+    return {};
+  }
+  return { Authorization: `Bearer ${token}` };
+}
+
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
+    ...options,
     headers: {
       'Content-Type': 'application/json',
-      ...options?.headers,
+      ...(options?.headers as Record<string, string> | undefined),
+      ...bearerHeaders(),
     },
-    ...options,
   });
 
   if (!response.ok) {
@@ -80,6 +95,9 @@ export async function uploadDocument(
   const response = await fetch(`${API_BASE}/${notebookId}/documents`, {
     method: 'POST',
     body: formData,
+    headers: {
+      ...bearerHeaders(),
+    },
   });
 
   if (!response.ok) {
@@ -100,14 +118,14 @@ export async function getDocument(
   notebookId: string,
   docId: string
 ): Promise<{ document: Document }> {
-  return fetchJson(`${API_BASE}/${notebookId}/documents/${docId}`);
+  return fetchJson(`${API_BASE}/${notebookId}/documents/${encodeURIComponent(docId)}`);
 }
 
 export async function deleteDocument(
   notebookId: string,
   docId: string
 ): Promise<{ success: boolean; message: string }> {
-  return fetchJson(`${API_BASE}/${notebookId}/documents/${docId}`, {
+  return fetchJson(`${API_BASE}/${notebookId}/documents/${encodeURIComponent(docId)}`, {
     method: 'DELETE',
   });
 }
@@ -116,14 +134,14 @@ export async function getDocumentProcessingStatus(
   notebookId: string,
   docId: string
 ): Promise<ProcessingStatusResponse> {
-  return fetchJson(`${API_BASE}/${notebookId}/documents/${docId}/status`);
+  return fetchJson(`${API_BASE}/${notebookId}/documents/${encodeURIComponent(docId)}/status`);
 }
 
 export async function getDocumentContent(
   notebookId: string,
   docId: string
 ): Promise<{ content: string }> {
-  return fetchJson(`${API_BASE}/${notebookId}/documents/${docId}/content`);
+  return fetchJson(`${API_BASE}/${notebookId}/documents/${encodeURIComponent(docId)}/content`);
 }
 
 // === Thread API ===

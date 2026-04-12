@@ -27,6 +27,7 @@ except ImportError:  # pragma: no cover - Windows fallback
 
 from deerflow.config import get_app_config
 from deerflow.config.paths import VIRTUAL_PATH_PREFIX, get_paths
+from deerflow.notebook import get_notebook_manager
 from deerflow.sandbox.sandbox import Sandbox
 from deerflow.sandbox.sandbox_provider import SandboxProvider
 
@@ -258,9 +259,27 @@ class AioSandboxProvider(SandboxProvider):
         Creates directories if they don't exist (lazy initialization).
         Mount sources use host_base_dir so that when running inside Docker with a
         mounted Docker socket (DooD), the host Docker daemon can resolve the paths.
+
+        When the thread belongs to a notebook, workspace/uploads/outputs are the
+        notebook's unified ``user-data`` tree (same paths as the upload API and
+        ``ThreadDataMiddleware``). Otherwise they remain per-thread under
+        ``threads/{thread_id}/user-data/``.
         """
         paths = get_paths()
         paths.ensure_thread_dirs(thread_id)
+
+        nb_manager = get_notebook_manager()
+        notebook = nb_manager.get_notebook_for_thread(thread_id)
+        if notebook:
+            nb_paths = nb_manager.paths
+            nb_paths.ensure_notebook_dirs(notebook.notebook_id)
+            nb_id = notebook.notebook_id
+            return [
+                (paths.host_path_under_base(nb_paths.workspace_dir(nb_id)), f"{VIRTUAL_PATH_PREFIX}/workspace", False),
+                (paths.host_path_under_base(nb_paths.uploads_dir(nb_id)), f"{VIRTUAL_PATH_PREFIX}/uploads", False),
+                (paths.host_path_under_base(nb_paths.outputs_dir(nb_id)), f"{VIRTUAL_PATH_PREFIX}/outputs", False),
+                (paths.host_acp_workspace_dir(thread_id), "/mnt/acp-workspace", True),
+            ]
 
         return [
             (paths.host_sandbox_work_dir(thread_id), f"{VIRTUAL_PATH_PREFIX}/workspace", False),

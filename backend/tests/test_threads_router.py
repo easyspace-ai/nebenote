@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from app.gateway.routers import threads
+from app.gateway.routers.auth import User, get_current_user
 from deerflow.config.paths import Paths
 from deerflow.notebook.manager import NotebookManager
 
@@ -81,6 +82,16 @@ class InMemoryCheckpointer:
             yield record
 
 
+def _test_user() -> User:
+    return User(
+        id="u1",
+        email="u1@test",
+        password_hash="x",
+        created_at="2020-01-01T00:00:00+00:00",
+        updated_at="2020-01-01T00:00:00+00:00",
+    )
+
+
 def test_delete_thread_data_removes_thread_directory(tmp_path):
     paths = Paths(tmp_path)
     thread_dir = paths.thread_dir("thread-cleanup")
@@ -129,11 +140,23 @@ def test_delete_thread_route_cleans_thread_directory(tmp_path):
 
     app = FastAPI()
     app.include_router(threads.router)
+    store = InMemoryStore()
+    store.records[(("threads",), "thread-route")] = {
+        "thread_id": "thread-route",
+        "status": "idle",
+        "created_at": 1.0,
+        "updated_at": 1.0,
+        "metadata": {"user_id": "u1"},
+        "values": {},
+    }
+    app.state.store = store
+    app.dependency_overrides[get_current_user] = lambda: _test_user()
 
     with patch("app.gateway.routers.threads.get_paths", return_value=paths):
         with TestClient(app) as client:
             response = client.delete("/api/threads/thread-route")
 
+    app.dependency_overrides.clear()
     assert response.status_code == 200
     assert response.json() == {"success": True, "message": "Deleted local thread data for thread-route"}
     assert not thread_dir.exists()
@@ -144,26 +167,30 @@ def test_delete_thread_route_rejects_invalid_thread_id(tmp_path):
 
     app = FastAPI()
     app.include_router(threads.router)
+    app.dependency_overrides[get_current_user] = lambda: _test_user()
 
     with patch("app.gateway.routers.threads.get_paths", return_value=paths):
         with TestClient(app) as client:
             response = client.delete("/api/threads/../escape")
 
+    app.dependency_overrides.clear()
     assert response.status_code == 404
 
 
-def test_delete_thread_route_returns_422_for_route_safe_invalid_id(tmp_path):
+def test_delete_thread_route_returns_404_when_acl_fails_before_path_validation(tmp_path):
     paths = Paths(tmp_path)
 
     app = FastAPI()
     app.include_router(threads.router)
+    app.dependency_overrides[get_current_user] = lambda: _test_user()
 
     with patch("app.gateway.routers.threads.get_paths", return_value=paths):
         with TestClient(app) as client:
             response = client.delete("/api/threads/thread.with.dot")
 
-    assert response.status_code == 422
-    assert "Invalid thread_id" in response.json()["detail"]
+    app.dependency_overrides.clear()
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Thread not found"
 
 
 def test_delete_thread_data_returns_generic_500_error(tmp_path):
@@ -187,14 +214,16 @@ def test_history_route_materializes_legacy_notebook_thread(tmp_path):
     app.include_router(threads.router)
     app.state.store = InMemoryStore()
     app.state.checkpointer = InMemoryCheckpointer()
+    app.dependency_overrides[get_current_user] = lambda: _test_user()
 
     notebook_manager = NotebookManager()
     notebook_manager.paths = notebook_manager.paths.__class__(tmp_path)
-    notebook = notebook_manager.create_notebook(title="Notebook")
+    notebook = notebook_manager.create_notebook(title="Notebook", owner_id="u1")
     legacy_thread_id = notebook_manager.create_thread(notebook.notebook_id, thread_id_override="legacy-thread")
 
     with (
         patch("app.gateway.routers.threads.get_notebook_manager", return_value=notebook_manager),
+        patch("app.gateway.thread_access.get_notebook_manager", return_value=notebook_manager),
         TestClient(app) as client,
     ):
         response = client.post(
@@ -202,6 +231,7 @@ def test_history_route_materializes_legacy_notebook_thread(tmp_path):
             json={"limit": 10},
         )
 
+    app.dependency_overrides.clear()
     assert response.status_code == 200
     history = response.json()
     assert len(history) == 1

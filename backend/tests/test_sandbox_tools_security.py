@@ -1,3 +1,4 @@
+import os
 import threading
 from pathlib import Path
 from types import SimpleNamespace
@@ -265,6 +266,28 @@ def test_resolve_and_validate_user_data_path_blocks_traversal(tmp_path: Path) ->
     # This path resolves outside the allowed roots
     with pytest.raises(PermissionError):
         _resolve_and_validate_user_data_path("/mnt/user-data/workspace/../../../etc/passwd", thread_data)
+
+
+def test_resolve_and_validate_user_data_path_allows_uploads_symlink_to_documents(tmp_path: Path) -> None:
+    """Library docs symlink as .../uploads/name.md -> .../documents/.../converted.md must read OK."""
+    nb = tmp_path / "notebooks" / "nb_test"
+    user_data = nb / "user-data"
+    uploads = user_data / "uploads"
+    documents = nb / "documents" / "doc_1"
+    uploads.mkdir(parents=True)
+    documents.mkdir(parents=True)
+    converted = documents / "converted.md"
+    converted.write_text("# ok", encoding="utf-8")
+    link = uploads / "Book Title.md"
+    link.symlink_to(os.path.relpath(converted, link.parent))
+
+    thread_data = {
+        "workspace_path": str(user_data / "workspace"),
+        "uploads_path": str(uploads),
+        "outputs_path": str(user_data / "outputs"),
+    }
+    out = _resolve_and_validate_user_data_path("/mnt/user-data/uploads/Book Title.md", thread_data)
+    assert out == os.path.abspath(str(link))
 
 
 # ---------- replace_virtual_paths_in_command ----------

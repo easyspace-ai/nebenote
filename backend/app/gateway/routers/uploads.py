@@ -2,14 +2,15 @@
 
 import logging
 import os
-import stat
+from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
+from app.gateway.routers.auth import User, get_current_user
+from app.gateway.thread_access import require_thread_access
 from deerflow.config.paths import get_paths
 from deerflow.notebook import get_notebook_manager
-from deerflow.sandbox.sandbox_provider import get_sandbox_provider
 from deerflow.uploads.manager import (
     PathTraversalError,
     delete_file_safe,
@@ -17,10 +18,9 @@ from deerflow.uploads.manager import (
     ensure_uploads_dir,
     list_files_in_dir,
     normalize_filename,
-    upload_artifact_url,
-    upload_virtual_path,
 )
-from deerflow.utils.file_conversion import CONVERTIBLE_EXTENSIONS, convert_file_to_markdown
+from deerflow.uploads.pipeline import process_upload_items
+from deerflow.utils.file_conversion import CONVERTIBLE_EXTENSIONS
 
 logger = logging.getLogger(__name__)
 
@@ -33,24 +33,6 @@ class UploadResponse(BaseModel):
     success: bool
     files: list[dict[str, str]]
     message: str
-
-
-def _make_file_sandbox_writable(file_path: os.PathLike[str] | str) -> None:
-    """Ensure uploaded files remain writable when mounted into non-local sandboxes.
-
-    In AIO sandbox mode, the gateway writes the authoritative host-side file
-    first, then the sandbox runtime may rewrite the same mounted path. Granting
-    world-writable access here prevents permission mismatches between the
-    gateway user and the sandbox runtime user.
-    """
-    file_stat = os.lstat(file_path)
-    if stat.S_ISLNK(file_stat.st_mode):
-        logger.warning("Skipping sandbox chmod for symlinked upload path: %s", file_path)
-        return
-
-    writable_mode = stat.S_IMODE(file_stat.st_mode) | stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH
-    chmod_kwargs = {"follow_symlinks": False} if os.chmod in os.supports_follow_symlinks else {}
-    os.chmod(file_path, writable_mode, **chmod_kwargs)
 
 
 def _get_upload_dir_for_thread(thread_id: str) -> tuple[os.PathLike, os.PathLike, str | None]:
@@ -87,13 +69,16 @@ def _get_upload_dir_for_thread(thread_id: str) -> tuple[os.PathLike, os.PathLike
 @router.post("", response_model=UploadResponse)
 async def upload_files(
     thread_id: str,
+    request: Request,
     files: list[UploadFile] = File(...),
+    user: User = Depends(get_current_user),
 ) -> UploadResponse:
     """Upload multiple files to a thread's uploads directory.
 
     If the thread belongs to a notebook, files are uploaded to the notebook's
     unified uploads directory instead of the thread-specific directory.
     """
+    await require_thread_access(request, thread_id, user)
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
 
@@ -104,64 +89,31 @@ async def upload_files(
 
     uploaded_files = []
 
-    sandbox_provider = get_sandbox_provider()
-    sandbox_id = sandbox_provider.acquire(thread_id)
-    sandbox = sandbox_provider.get(sandbox_id)
-
+    items: list[tuple[str, bytes]] = []
     for file in files:
         if not file.filename:
             continue
-
         try:
-            safe_filename = normalize_filename(file.filename)
+            normalize_filename(file.filename)
         except ValueError:
             logger.warning(f"Skipping file with unsafe filename: {file.filename!r}")
             continue
+        content = await file.read()
+        items.append((file.filename, content))
 
-        try:
-            content = await file.read()
-            file_path = uploads_dir / safe_filename
-            file_path.write_bytes(content)
+    if not items:
+        raise HTTPException(status_code=400, detail="No valid files provided")
 
-            virtual_path = upload_virtual_path(safe_filename)
-
-            if sandbox_id != "local":
-                _make_file_sandbox_writable(file_path)
-                sandbox.update_file(virtual_path, content)
-
-            file_info = {
-                "filename": safe_filename,
-                "size": str(len(content)),
-                "path": str(file_path),
-                "virtual_path": virtual_path,
-                "artifact_url": upload_artifact_url(thread_id, safe_filename),
-            }
-
-            if notebook_id:
-                file_info["notebook_id"] = notebook_id
-
-            logger.info(f"Saved file: {safe_filename} ({len(content)} bytes) to {file_info['path']}")
-
-            file_ext = file_path.suffix.lower()
-            if file_ext in CONVERTIBLE_EXTENSIONS:
-                md_path = await convert_file_to_markdown(file_path)
-                if md_path:
-                    md_virtual_path = upload_virtual_path(md_path.name)
-
-                    if sandbox_id != "local":
-                        _make_file_sandbox_writable(md_path)
-                        sandbox.update_file(md_virtual_path, md_path.read_bytes())
-
-                    file_info["markdown_file"] = md_path.name
-                    file_info["markdown_path"] = str(uploads_dir / md_path.name)
-                    file_info["markdown_virtual_path"] = md_virtual_path
-                    file_info["markdown_artifact_url"] = upload_artifact_url(thread_id, md_path.name)
-
-            uploaded_files.append(file_info)
-
-        except Exception as e:
-            logger.error(f"Failed to upload {file.filename}: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to upload {file.filename}: {str(e)}")
+    try:
+        uploaded_files = await process_upload_items(
+            Path(uploads_dir),
+            thread_id,
+            items,
+            notebook_id=notebook_id,
+        )
+    except Exception as e:
+        logger.error(f"Failed to upload files: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload files: {str(e)}")
 
     return UploadResponse(
         success=True,
@@ -171,12 +123,17 @@ async def upload_files(
 
 
 @router.get("/list", response_model=dict)
-async def list_uploaded_files(thread_id: str) -> dict:
+async def list_uploaded_files(
+    thread_id: str,
+    request: Request,
+    user: User = Depends(get_current_user),
+) -> dict:
     """List all files in a thread's uploads directory.
 
     If the thread belongs to a notebook, lists files from the notebook's
     unified uploads directory.
     """
+    await require_thread_access(request, thread_id, user)
     uploads_dir, sandbox_uploads, notebook_id = _get_upload_dir_for_thread(thread_id)
 
     result = list_files_in_dir(uploads_dir)
@@ -192,12 +149,18 @@ async def list_uploaded_files(thread_id: str) -> dict:
 
 
 @router.delete("/{filename}")
-async def delete_uploaded_file(thread_id: str, filename: str) -> dict:
+async def delete_uploaded_file(
+    thread_id: str,
+    filename: str,
+    request: Request,
+    user: User = Depends(get_current_user),
+) -> dict:
     """Delete a file from a thread's uploads directory.
 
     If the thread belongs to a notebook, deletes from the notebook's
     unified uploads directory.
     """
+    await require_thread_access(request, thread_id, user)
     uploads_dir, _, notebook_id = _get_upload_dir_for_thread(thread_id)
 
     try:

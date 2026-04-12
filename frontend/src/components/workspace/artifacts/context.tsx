@@ -29,14 +29,19 @@ const ArtifactsContext = createContext<ArtifactsContextType | undefined>(
 
 interface ArtifactsProviderProps {
   children: ReactNode;
+  /** When set, overrides default closed state (e.g. notebook Studio shows a third column). */
+  defaultOpen?: boolean;
 }
 
-export function ArtifactsProvider({ children }: ArtifactsProviderProps) {
+export function ArtifactsProvider({
+  children,
+  defaultOpen,
+}: ArtifactsProviderProps) {
   const [artifacts, setArtifacts] = useState<string[]>([]);
   const [selectedArtifact, setSelectedArtifact] = useState<string | null>(null);
   const [autoSelect, setAutoSelect] = useState(true);
   const [open, setOpen] = useState(
-    env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY === "true",
+    defaultOpen ?? (env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY === "true"),
   );
   const [autoOpen, setAutoOpen] = useState(true);
   const { setOpen: setSidebarOpen } = useSidebar();

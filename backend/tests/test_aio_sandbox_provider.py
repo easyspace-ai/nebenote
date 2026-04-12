@@ -1,11 +1,14 @@
 """Tests for AioSandboxProvider mount helpers."""
 
 import importlib
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from deerflow.config.paths import Paths, join_host_path
+from deerflow.notebook.models import Notebook, NotebookSettings
+from deerflow.notebook.paths import NotebookPaths
 
 # ── ensure_thread_dirs ───────────────────────────────────────────────────────
 
@@ -88,6 +91,43 @@ def test_join_host_path_preserves_windows_drive_letter_style():
     joined = join_host_path(base, "threads", "thread-9", "user-data", "outputs")
 
     assert joined == r"C:\Users\demo\deer-flow\backend\.deer-flow\threads\thread-9\user-data\outputs"
+
+
+def test_get_thread_mounts_notebook_thread_maps_notebook_user_data(tmp_path, monkeypatch):
+    """Threads inside a notebook must mount notebooks/{id}/user-data/*, not threads/{id}/user-data/*."""
+    aio_mod = importlib.import_module("deerflow.community.aio_sandbox.aio_sandbox_provider")
+    monkeypatch.setattr(aio_mod, "get_paths", lambda: Paths(base_dir=tmp_path))
+
+    nb = Notebook(
+        notebook_id="nb_mounttest",
+        owner_id=None,
+        title="Mount test",
+        description=None,
+        tags=[],
+        documents=[],
+        thread_ids=["thread-in-nb"],
+        created_at=time.time(),
+        updated_at=time.time(),
+        settings=NotebookSettings(),
+    )
+    mock_manager = MagicMock()
+    mock_manager.paths = NotebookPaths(tmp_path)
+    mock_manager.get_notebook_for_thread = lambda tid: nb if tid == "thread-in-nb" else None
+    monkeypatch.setattr(aio_mod, "get_notebook_manager", lambda: mock_manager)
+
+    mounts = aio_mod.AioSandboxProvider._get_thread_mounts("thread-in-nb")
+    by_container = {m[1]: m[0] for m in mounts}
+
+    assert by_container["/mnt/user-data/uploads"] == str(
+        tmp_path / "notebooks" / "nb_mounttest" / "user-data" / "uploads"
+    )
+    assert by_container["/mnt/user-data/workspace"] == str(
+        tmp_path / "notebooks" / "nb_mounttest" / "user-data" / "workspace"
+    )
+    assert by_container["/mnt/user-data/outputs"] == str(
+        tmp_path / "notebooks" / "nb_mounttest" / "user-data" / "outputs"
+    )
+    assert by_container["/mnt/acp-workspace"] == str(tmp_path / "threads" / "thread-in-nb" / "acp-workspace")
 
 
 def test_get_thread_mounts_preserves_windows_host_path_style(tmp_path, monkeypatch):

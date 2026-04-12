@@ -17,10 +17,12 @@ import time
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app.gateway.deps import get_checkpointer, get_store
+from app.gateway.routers.auth import User, get_current_user
+from app.gateway.thread_access import require_thread_access, user_may_access_thread_metadata
 from deerflow.config.paths import Paths, get_paths
 from deerflow.notebook import get_notebook_manager
 from deerflow.runtime import serialize_channel_values
@@ -280,7 +282,7 @@ async def _ensure_notebook_thread_record(
     await create_thread_record(
         request,
         thread_id=thread_id,
-        metadata={"notebook_id": notebook.notebook_id},
+        metadata={"notebook_id": notebook.notebook_id, "user_id": notebook.owner_id},
     )
 
     record = await _store_get(store, thread_id) if store is not None else None
@@ -313,12 +315,17 @@ def _derive_thread_status(checkpoint_tuple) -> str:
 
 
 @router.delete("/{thread_id}", response_model=ThreadDeleteResponse)
-async def delete_thread_data(thread_id: str, request: Request) -> ThreadDeleteResponse:
+async def delete_thread_data(
+    thread_id: str,
+    request: Request,
+    user: User = Depends(get_current_user),
+) -> ThreadDeleteResponse:
     """Delete local persisted filesystem data for a thread.
 
     Cleans DeerFlow-managed thread directories, removes checkpoint data,
     and removes the thread record from the Store.
     """
+    await require_thread_access(request, thread_id, user)
     # Clean local filesystem
     response = _delete_thread_data(thread_id)
 
@@ -343,22 +350,28 @@ async def delete_thread_data(thread_id: str, request: Request) -> ThreadDeleteRe
 
 
 @router.post("", response_model=ThreadResponse)
-async def create_thread(body: ThreadCreateRequest, request: Request) -> ThreadResponse:
+async def create_thread(body: ThreadCreateRequest, request: Request, user: User = Depends(get_current_user)) -> ThreadResponse:
     """Create a new thread.
 
     The thread record is written to the Store (for fast listing) and an
     empty checkpoint is written to the checkpointer (for state reads).
     Idempotent: returns the existing record when ``thread_id`` already exists.
     """
+    meta = dict(body.metadata or {})
+    meta["user_id"] = user.id
     return await create_thread_record(
         request,
         thread_id=body.thread_id,
-        metadata=body.metadata,
+        metadata=meta,
     )
 
 
 @router.post("/search", response_model=list[ThreadResponse])
-async def search_threads(body: ThreadSearchRequest, request: Request) -> list[ThreadResponse]:
+async def search_threads(
+    body: ThreadSearchRequest,
+    request: Request,
+    user: User = Depends(get_current_user),
+) -> list[ThreadResponse]:
     """Search and list threads.
 
     Two-phase approach:
@@ -459,12 +472,23 @@ async def search_threads(body: ThreadSearchRequest, request: Request) -> list[Th
         results = [r for r in results if r.status == body.status]
 
     results.sort(key=lambda r: r.updated_at, reverse=True)
+    results = [
+        r
+        for r in results
+        if user_may_access_thread_metadata(r.metadata, user.id)
+    ]
     return results[body.offset : body.offset + body.limit]
 
 
 @router.patch("/{thread_id}", response_model=ThreadResponse)
-async def patch_thread(thread_id: str, body: ThreadPatchRequest, request: Request) -> ThreadResponse:
+async def patch_thread(
+    thread_id: str,
+    body: ThreadPatchRequest,
+    request: Request,
+    user: User = Depends(get_current_user),
+) -> ThreadResponse:
     """Merge metadata into a thread record."""
+    await require_thread_access(request, thread_id, user)
     store = get_store(request)
     if store is None:
         raise HTTPException(status_code=503, detail="Store not available")
@@ -494,13 +518,18 @@ async def patch_thread(thread_id: str, body: ThreadPatchRequest, request: Reques
 
 
 @router.get("/{thread_id}", response_model=ThreadResponse)
-async def get_thread(thread_id: str, request: Request) -> ThreadResponse:
+async def get_thread(
+    thread_id: str,
+    request: Request,
+    user: User = Depends(get_current_user),
+) -> ThreadResponse:
     """Get thread info.
 
     Reads metadata from the Store and derives the accurate execution
     status from the checkpointer.  Falls back to the checkpointer alone
     for threads that pre-date Store adoption (backward compat).
     """
+    await require_thread_access(request, thread_id, user)
     store = get_store(request)
     checkpointer = get_checkpointer(request)
 
@@ -543,12 +572,17 @@ async def get_thread(thread_id: str, request: Request) -> ThreadResponse:
 
 
 @router.get("/{thread_id}/state", response_model=ThreadStateResponse)
-async def get_thread_state(thread_id: str, request: Request) -> ThreadStateResponse:
+async def get_thread_state(
+    thread_id: str,
+    request: Request,
+    user: User = Depends(get_current_user),
+) -> ThreadStateResponse:
     """Get the latest state snapshot for a thread.
 
     Channel values are serialized to ensure LangChain message objects
     are converted to JSON-safe dicts.
     """
+    await require_thread_access(request, thread_id, user)
     try:
         _, checkpoint_tuple = await _ensure_notebook_thread_record(request, thread_id)
     except Exception:
@@ -589,13 +623,19 @@ async def get_thread_state(thread_id: str, request: Request) -> ThreadStateRespo
 
 
 @router.post("/{thread_id}/state", response_model=ThreadStateResponse)
-async def update_thread_state(thread_id: str, body: ThreadStateUpdateRequest, request: Request) -> ThreadStateResponse:
+async def update_thread_state(
+    thread_id: str,
+    body: ThreadStateUpdateRequest,
+    request: Request,
+    user: User = Depends(get_current_user),
+) -> ThreadStateResponse:
     """Update thread state (e.g. for human-in-the-loop resume or title rename).
 
     Writes a new checkpoint that merges *body.values* into the latest
     channel values, then syncs any updated ``title`` field back to the Store
     so that ``/threads/search`` reflects the change immediately.
     """
+    await require_thread_access(request, thread_id, user)
     checkpointer = get_checkpointer(request)
     store = get_store(request)
 
@@ -681,8 +721,14 @@ async def update_thread_state(thread_id: str, body: ThreadStateUpdateRequest, re
 
 
 @router.post("/{thread_id}/history", response_model=list[HistoryEntry])
-async def get_thread_history(thread_id: str, body: ThreadHistoryRequest, request: Request) -> list[HistoryEntry]:
+async def get_thread_history(
+    thread_id: str,
+    body: ThreadHistoryRequest,
+    request: Request,
+    user: User = Depends(get_current_user),
+) -> list[HistoryEntry]:
     """Get checkpoint history for a thread."""
+    await require_thread_access(request, thread_id, user)
     checkpointer = get_checkpointer(request)
 
     try:

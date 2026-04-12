@@ -124,7 +124,6 @@ class NotebookPaths:
     def ensure_notebook_dirs(self, notebook_id: str) -> None:
         """Create all standard directories for a notebook."""
         for d in [
-            self.documents_dir(notebook_id),
             self.user_data_dir(notebook_id),
             self.workspace_dir(notebook_id),
             self.uploads_dir(notebook_id),

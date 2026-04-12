@@ -12,13 +12,14 @@ from langgraph.config import get_config
 from langgraph.runtime import Runtime
 
 from deerflow.notebook import get_notebook_manager, get_notebook_paths
+from deerflow.uploads.manager import upload_virtual_path
 
 logger = logging.getLogger(__name__)
 
 # Patterns for @document references
-# Matches: @doc_abc123  or  @[Document Title](doc_abc123)
+# Matches: @doc_abc123  or  @[Document Title](doc_abc123)  or  @[Title](file.pdf)
 DOC_REF_PATTERN = re.compile(
-    r'@(?:(doc_[a-zA-Z0-9]+)|\[([^\]]+)\]\((doc_[a-zA-Z0-9]+)\))'
+    r'@(?:(doc_[a-zA-Z0-9]+)|\[([^\]]+)\]\(([^)]+)\))'
 )
 
 
@@ -35,8 +36,8 @@ class NotebookMiddleware(AgentMiddleware[NotebookMiddlewareState]):
     Looks for @doc_id references in the last human message and injects
     relevant document context into the conversation context.
 
-    Documents are available in the sandbox at:
-        /mnt/notebook/{notebook_id}/documents/{doc_id}/converted.md
+    Notebook library files live in the shared uploads folder (same as chat uploads), e.g.
+    ``/mnt/user-data/uploads/<filename>`` in the sandbox.
     """
 
     state_schema = NotebookMiddlewareState
@@ -51,16 +52,18 @@ class NotebookMiddleware(AgentMiddleware[NotebookMiddlewareState]):
 
     def _extract_doc_ids(self, content: str) -> list[str]:
         """Extract document IDs from @document references."""
+        from pathlib import Path as _Path
+
         doc_ids = []
         matches = DOC_REF_PATTERN.finditer(content)
 
         for match in matches:
             # Group 1: @doc_abc123 format
-            # Groups 2-3: @[Title](doc_abc123) format
+            # Groups 2-3: @[Title](doc_abc123 or filename) format
             if match.group(1):
                 doc_ids.append(match.group(1))
             elif match.group(3):
-                doc_ids.append(match.group(3))
+                doc_ids.append(_Path(match.group(3).strip()).name)
 
         # Deduplicate while preserving order
         seen = set()
@@ -74,43 +77,36 @@ class NotebookMiddleware(AgentMiddleware[NotebookMiddlewareState]):
 
     def _build_notebook_docs_listing(self, notebook: Any, documents: list[Any]) -> str:
         """Build a listing of all documents in the notebook."""
-        import re
         lines = []
         lines.append(f"\n{'='*60}")
         lines.append(f"NOTEBOOK: {notebook.title}")
         lines.append(f"{'='*60}")
-        lines.append("\nAvailable documents in this notebook:")
+        lines.append(
+            "Notebook files are stored alongside chat uploads under the shared uploads directory; "
+            "in the sandbox they appear under /mnt/user-data/uploads/."
+        )
+        lines.append("\nAvailable files in this notebook:")
 
         ready_docs = [d for d in documents if d.status.value == "ready"]
-        processing_docs = [d for d in documents if d.status.value in ("pending", "processing")]
 
         if ready_docs:
             lines.append(f"\nReady ({len(ready_docs)}):")
             for doc in ready_docs:
-                safe_title = re.sub(r'[^\w\-_.() ]', '_', doc.title)
-                title_link = f"/mnt/notebook/{notebook.notebook_id}/documents/_by_title/{doc.doc_id}_{safe_title}.md"
+                vpath = upload_virtual_path(doc.doc_id)
                 lines.append(f"  - @{doc.title} ({doc.doc_id})")
                 lines.append(f"    Use @{doc.doc_id} or @[{doc.title}]({doc.doc_id}) to reference")
-                lines.append(f"    Or read by title: {title_link}")
-                lines.append(f"    Or read by ID: /mnt/notebook/{notebook.notebook_id}/documents/{doc.doc_id}/converted.md")
-                if doc.outline:
-                    lines.append(f"    {len(doc.outline)} sections, {doc.stats.word_count or 0} words")
-
-        if processing_docs:
-            lines.append(f"\nProcessing ({len(processing_docs)}):")
-            for doc in processing_docs:
-                lines.append(f"  - {doc.title} ({doc.doc_id}) - {doc.status.value}")
+                lines.append(f"    Path: {vpath}")
 
         lines.append(f"\n{'='*60}\n")
         return "\n".join(lines)
 
-    def _build_document_context(self, doc: Any, md_content: str, notebook_id: str) -> str:
+    def _build_document_context(self, doc: Any, md_content: str) -> str:
         """Build a context section for a document."""
         lines = []
         lines.append(f"\n{'='*60}")
         lines.append(f"DOCUMENT: @{doc.title} ({doc.doc_id})")
         lines.append(f"{'='*60}")
-        lines.append(f"Path: /mnt/notebook/{notebook_id}/documents/{doc.doc_id}/converted.md")
+        lines.append(f"Path: {upload_virtual_path(doc.doc_id)}")
 
         if doc.outline:
             lines.append("\nDocument Outline:")
@@ -164,9 +160,10 @@ class NotebookMiddleware(AgentMiddleware[NotebookMiddlewareState]):
         if not isinstance(last_message, HumanMessage):
             return None
 
-        # Get notebook_id from runtime context or configurable
+        # Get notebook_id from runtime context, configurable, or thread membership
         notebook_id = None
         runtime_context = runtime.context or {}
+        thread_id = runtime_context.get("thread_id")
 
         if "notebook_id" in runtime_context:
             notebook_id = runtime_context["notebook_id"]
@@ -176,8 +173,15 @@ class NotebookMiddleware(AgentMiddleware[NotebookMiddlewareState]):
             try:
                 cfg = get_config()
                 notebook_id = cfg.get("configurable", {}).get("notebook_id")
+                if not thread_id:
+                    thread_id = cfg.get("configurable", {}).get("thread_id")
             except RuntimeError:
                 pass  # get_config() raises outside a runnable context
+
+        if not notebook_id and thread_id:
+            nb = self.manager.get_notebook_for_thread(thread_id)
+            if nb:
+                notebook_id = nb.notebook_id
 
         # Extract document references from message content
         content = last_message.content
@@ -191,47 +195,37 @@ class NotebookMiddleware(AgentMiddleware[NotebookMiddlewareState]):
         notebook_docs = []
 
         try:
-            # If we have a notebook_id, always list all available documents
+            notebook = None
             if notebook_id:
                 try:
                     notebook = self.manager.get_notebook(notebook_id)
-                    notebook_docs = notebook.documents
+                    notebook_docs = self.manager.list_documents(notebook_id)
                     logger.info(
-                        "Notebook %s has %d documents total",
+                        "Notebook %s has %d uploads listed",
                         notebook_id,
                         len(notebook_docs),
                     )
                 except FileNotFoundError:
                     logger.warning("Notebook %s not found", notebook_id)
+                    notebook_docs = []
 
-            # If no notebook_id specified but we have referenced docs, search all notebooks
-            notebooks_to_search = []
-            if notebook_id:
-                try:
-                    notebooks_to_search.append(self.manager.get_notebook(notebook_id))
-                except FileNotFoundError:
-                    pass
             elif referenced_doc_ids:
-                # Search all notebooks for referenced docs
-                notebooks_to_search = self.manager.list_notebooks()
-                if notebooks_to_search:
-                    logger.info("No notebook_id specified, searching all %d notebooks", len(notebooks_to_search))
+                logger.info(
+                    "Document references present but no notebook context; skipping (no cross-notebook lookup)"
+                )
 
-            # Add notebook documents listing if we have a notebook
-            if notebook_docs:
+            if notebook_id and notebook and notebook_docs:
                 context_sections.append(self._build_notebook_docs_listing(notebook, notebook_docs))
 
-            # Process referenced documents
+            # Process referenced documents (only inside current notebook)
             for doc_id in referenced_doc_ids:
-                # Find the document in one of the notebooks
                 doc = None
-                found_notebook_id = None
-                for notebook_candidate in notebooks_to_search:
-                    candidate = notebook_candidate.get_document(doc_id)
-                    if candidate:
-                        doc = candidate
-                        found_notebook_id = notebook_candidate.notebook_id
-                        break
+                found_notebook_id = notebook_id
+                if notebook_id:
+                    try:
+                        doc = self.manager.get_document(notebook_id, doc_id)
+                    except FileNotFoundError:
+                        doc = None
 
                 if not doc:
                     context_sections.append(
@@ -248,7 +242,7 @@ class NotebookMiddleware(AgentMiddleware[NotebookMiddlewareState]):
                 # Read converted Markdown content
                 md_content = self.manager.read_document_content(found_notebook_id, doc_id)
                 if md_content:
-                    doc_context = self._build_document_context(doc, md_content, found_notebook_id)
+                    doc_context = self._build_document_context(doc, md_content)
                     context_sections.append(doc_context)
                 else:
                     context_sections.append(

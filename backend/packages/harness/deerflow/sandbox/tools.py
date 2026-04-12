@@ -1,3 +1,4 @@
+import os
 import posixpath
 import re
 import shlex
@@ -639,43 +640,59 @@ def validate_local_tool_path(path: str, thread_data: ThreadDataState | None, *, 
     raise PermissionError(f"Only paths under {VIRTUAL_PATH_PREFIX}/, {_get_skills_container_path()}/, {_ACP_WORKSPACE_VIRTUAL_PATH}/, or configured mount paths are allowed")
 
 
-def _validate_resolved_user_data_path(resolved: Path, thread_data: ThreadDataState) -> None:
-    """Verify that a resolved host path stays inside allowed per-thread roots.
+def _allowed_user_data_host_roots(thread_data: ThreadDataState) -> list[str]:
+    """Host directory roots for user-data sandbox access (abspath strings).
 
-    Raises PermissionError if the path escapes workspace/uploads/outputs.
+    Includes ``.../documents`` next to ``.../user-data`` so symlinks under
+    ``uploads/`` that point at library ``converted.md`` (realpath under
+    ``documents/``) are allowed without following symlinks only to reject them.
     """
-    allowed_roots = [
-        Path(p).resolve()
-        for p in (
-            thread_data.get("workspace_path"),
-            thread_data.get("uploads_path"),
-            thread_data.get("outputs_path"),
-        )
-        if p is not None
-    ]
+    roots: list[str] = []
+    for key in ("workspace_path", "uploads_path", "outputs_path"):
+        p = thread_data.get(key)
+        if p:
+            roots.append(os.path.abspath(str(p)))
+    uploads = thread_data.get("uploads_path")
+    if uploads:
+        up = Path(os.path.abspath(str(uploads)))
+        if up.name == "uploads" and up.parent.name == "user-data":
+            roots.append(os.path.abspath(str(up.parent.parent / "documents")))
+    return roots
 
-    if not allowed_roots:
+
+def _host_path_is_under_any_root(path: str, roots: list[str]) -> bool:
+    p = os.path.abspath(path)
+    for r in roots:
+        if p == r or p.startswith(r + os.sep):
+            return True
+    return False
+
+
+def _validate_resolved_user_data_path(resolved_str: str, thread_data: ThreadDataState) -> None:
+    """Verify that the target path is allowed for user-data tools.
+
+    Uses :func:`os.path.realpath` so a symlink under ``uploads/`` is validated by
+    its final file location (e.g. notebook library ``documents/...``). Paths that
+    escape all allowed roots (including via symlink) raise ``PermissionError``.
+    """
+    roots = _allowed_user_data_host_roots(thread_data)
+    if not roots:
         raise SandboxRuntimeError("No allowed local sandbox directories configured")
-
-    for root in allowed_roots:
-        try:
-            resolved.relative_to(root)
-            return
-        except ValueError:
-            continue
-
+    real = os.path.realpath(resolved_str)
+    if _host_path_is_under_any_root(real, roots):
+        return
     raise PermissionError("Access denied: path traversal detected")
 
 
 def _resolve_and_validate_user_data_path(path: str, thread_data: ThreadDataState) -> str:
     """Resolve a /mnt/user-data virtual path and validate it stays in bounds.
 
-    Returns the resolved host path string.
+    Returns the logical host path (symlinks not expanded) so ``read_file`` opens
+    the path the user-data tree exposes (e.g. symlink names under ``uploads/``).
     """
     resolved_str = replace_virtual_path(path, thread_data)
-    resolved = Path(resolved_str).resolve()
-    _validate_resolved_user_data_path(resolved, thread_data)
-    return str(resolved)
+    _validate_resolved_user_data_path(resolved_str, thread_data)
+    return os.path.abspath(resolved_str)
 
 
 def validate_local_bash_command_paths(command: str, thread_data: ThreadDataState | None) -> None:

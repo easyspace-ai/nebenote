@@ -139,7 +139,9 @@ export default function NotebooksPage() {
             <Card
               key={notebook.notebook_id}
               className="overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
-              onClick={() => router.push(`/workspace/notebooks/${notebook.notebook_id}`)}
+              onClick={() =>
+                router.push(`/workspace/notebooks/${notebook.notebook_id}/chats`)
+              }
             >
               <CardHeader className="pb-4">
                 <CardTitle className="line-clamp-1">{notebook.title}</CardTitle>
@@ -151,7 +153,7 @@ export default function NotebooksPage() {
               </CardHeader>
               <CardContent className="space-y-2 text-sm text-muted-foreground">
                 <div className="flex items-center justify-between">
-                  <span>{notebook.documents.length} documents</span>
+                  <span>{notebook.documents?.length ?? 0} documents</span>
                   <span>{notebook.thread_ids.length} threads</span>
                 </div>
                 <div>

@@ -90,6 +90,19 @@ const ChatBox: React.FC<{ children: React.ReactNode; threadId: string }> = ({
     return pathname.replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
   }, [pathname]);
 
+  const isNotebookStudio = useMemo(
+    () =>
+      pathname.includes("/workspace/notebooks/") && pathname.includes("/chats"),
+    [pathname],
+  );
+
+  const groupDefaultLayout = useMemo(() => {
+    if (artifactPanelOpen) {
+      return OPEN_MODE;
+    }
+    return CLOSE_MODE;
+  }, [artifactPanelOpen]);
+
   useEffect(() => {
     if (layoutRef.current) {
       if (artifactPanelOpen) {
@@ -100,29 +113,35 @@ const ChatBox: React.FC<{ children: React.ReactNode; threadId: string }> = ({
     }
   }, [artifactPanelOpen]);
 
+  const artifactHandleDead =
+    !artifactPanelOpen && !isNotebookStudio;
+
   return (
     <ResizablePanelGroup
       id={`${resizableIdBase}-panels`}
       orientation="horizontal"
-      defaultLayout={{ chat: 100, artifacts: 0 }}
+      defaultLayout={groupDefaultLayout}
       groupRef={layoutRef}
+      className="min-h-0 min-w-0 flex-1"
     >
-      <ResizablePanel className="relative" defaultSize={100} id="chat">
+      <ResizablePanel className="relative min-h-0 min-w-0" id="chat">
         {children}
       </ResizablePanel>
       <ResizableHandle
         id={`${resizableIdBase}-separator`}
+        withHandle
         className={cn(
-          "opacity-33 hover:opacity-100",
-          !artifactPanelOpen && "pointer-events-none opacity-0",
+          "bg-border/90 hover:bg-accent/40 relative z-10 w-2 max-w-[10px] shrink-0 transition-colors",
+          artifactHandleDead && "pointer-events-none opacity-0",
         )}
       />
       <ResizablePanel
         className={cn(
-          "transition-all duration-300 ease-in-out",
+          "min-h-0 min-w-0 transition-all duration-300 ease-in-out",
           !artifactsOpen && "opacity-0",
         )}
         id="artifacts"
+        minSize={isNotebookStudio ? 14 : 0}
       >
         <div
           className={cn(

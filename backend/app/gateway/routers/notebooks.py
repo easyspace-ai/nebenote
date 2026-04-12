@@ -1,20 +1,23 @@
 """Notebook API endpoints."""
 
 import logging
+import time
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
+from app.gateway.routers.auth import User, get_current_user
 from app.gateway.routers.threads import create_thread_record
 from deerflow.notebook import (
     Document,
+    DocumentStatus,
     Notebook,
     NotebookManager,
     NotebookSettings,
     get_notebook_manager,
 )
+from deerflow.uploads.pipeline import process_upload_items
 
 logger = logging.getLogger(__name__)
 
@@ -68,39 +71,64 @@ def _manager() -> NotebookManager:
     return get_notebook_manager()
 
 
+async def _get_or_create_upload_thread(notebook_id: str, request: Request) -> str:
+    """Thread used for notebook uploads (same sandbox + conversion pipeline as chat uploads)."""
+    nb = _manager().get_notebook(notebook_id)
+    tid = nb.settings.upload_thread_id
+    if tid and tid in nb.thread_ids:
+        return tid
+    created = await create_thread_record(request, metadata={"notebook_id": notebook_id})
+    _manager().set_upload_thread_id(notebook_id, created.thread_id)
+    return created.thread_id
+
+
+def _notebook_owned_or_404(notebook_id: str, user_id: str) -> Notebook:
+    """Return notebook if owned by user, else 404 (no existence leak)."""
+    try:
+        nb = _manager().get_notebook(notebook_id)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    if nb.owner_id != user_id:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    return nb
+
+
 # == Notebook Endpoints ==
 
 @router.post("", response_model=NotebookResponse)
-async def create_notebook(request: CreateNotebookRequest):
+async def create_notebook(request: CreateNotebookRequest, user: User = Depends(get_current_user)):
     """Create a new notebook."""
     notebook = _manager().create_notebook(
         title=request.title,
         description=request.description,
         tags=request.tags,
+        owner_id=user.id,
     )
     return {"notebook": notebook}
 
 
 @router.get("", response_model=NotebookListResponse)
-async def list_notebooks():
-    """List all notebooks."""
-    notebooks = _manager().list_notebooks()
+async def list_notebooks(user: User = Depends(get_current_user)):
+    """List notebooks owned by the current user."""
+    notebooks = _manager().list_notebooks(owner_id=user.id)
     return {"notebooks": notebooks}
 
 
 @router.get("/{notebook_id}", response_model=NotebookResponse)
-async def get_notebook(notebook_id: str):
+async def get_notebook(notebook_id: str, user: User = Depends(get_current_user)):
     """Get a notebook by ID."""
-    try:
-        notebook = _manager().get_notebook(notebook_id)
-        return {"notebook": notebook}
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Notebook not found")
+    notebook = _notebook_owned_or_404(notebook_id, user.id)
+    return {"notebook": notebook}
 
 
 @router.put("/{notebook_id}", response_model=NotebookResponse)
-async def update_notebook(notebook_id: str, request: UpdateNotebookRequest):
+async def update_notebook(
+    notebook_id: str,
+    request: UpdateNotebookRequest,
+    user: User = Depends(get_current_user),
+):
     """Update a notebook's metadata."""
+    _notebook_owned_or_404(notebook_id, user.id)
     try:
         notebook = _manager().update_notebook(
             notebook_id,
@@ -115,8 +143,9 @@ async def update_notebook(notebook_id: str, request: UpdateNotebookRequest):
 
 
 @router.delete("/{notebook_id}")
-async def delete_notebook(notebook_id: str):
+async def delete_notebook(notebook_id: str, user: User = Depends(get_current_user)):
     """Delete a notebook and all its data."""
+    _notebook_owned_or_404(notebook_id, user.id)
     _manager().delete_notebook(notebook_id)
     return {"success": True, "message": f"Deleted notebook {notebook_id}"}
 
@@ -126,51 +155,60 @@ async def delete_notebook(notebook_id: str):
 @router.post("/{notebook_id}/documents", response_model=DocumentResponse)
 async def upload_document(
     notebook_id: str,
+    request: Request,
     file: UploadFile = File(...),
     title: str | None = None,
+    user: User = Depends(get_current_user),
 ):
-    """Upload a document to a notebook."""
-    logger.info(f"[Notebook Upload] Starting upload for notebook {notebook_id}: {file.filename} (size: {file.size} bytes)")
+    """Upload a file into the notebook shared user-data/uploads (same pipeline as thread uploads)."""
+    logger.info(
+        "[Notebook Upload] notebook=%s file=%r",
+        notebook_id,
+        file.filename,
+    )
+
+    _notebook_owned_or_404(notebook_id, user.id)
+
+    thread_id = await _get_or_create_upload_thread(notebook_id, request)
+    content = await file.read()
+    raw_name = file.filename or "unknown"
+    uploads_dir = _manager().paths.uploads_dir(notebook_id)
 
     try:
-        # Verify notebook exists
-        _manager().get_notebook(notebook_id)
-        logger.debug(f"[Notebook Upload] Verified notebook exists: {notebook_id}")
-    except FileNotFoundError:
-        logger.error(f"[Notebook Upload] Notebook not found: {notebook_id}")
-        raise HTTPException(status_code=404, detail="Notebook not found")
-
-    # Save uploaded file to temp
-    suffix = Path(file.filename).suffix if file.filename else ".bin"
-    logger.debug(f"[Notebook Upload] Using temporary file suffix: {suffix}")
-
-    with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        content = await file.read()
-        tmp.write(content)
-        tmp_path = Path(tmp.name)
-        logger.info(f"[Notebook Upload] Saved temporary file: {tmp_path} ({len(content)} bytes)")
-
-    try:
-        logger.info("[Notebook Upload] Adding document to notebook manager...")
-        doc = _manager().add_document(
-            notebook_id,
-            tmp_path,
-            original_filename=file.filename or "unknown",
-            title=title,
+        uploaded = await process_upload_items(
+            Path(uploads_dir),
+            thread_id,
+            [(raw_name, content)],
+            notebook_id=notebook_id,
         )
-        logger.info(f"[Notebook Upload] Document created successfully: doc_id={doc.doc_id}, status={doc.status}")
-        return {"document": doc}
     except Exception as e:
-        logger.exception(f"[Notebook Upload] Failed to process document: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to process document: {str(e)}")
-    finally:
-        tmp_path.unlink(missing_ok=True)
-        logger.debug(f"[Notebook Upload] Cleaned up temporary file: {tmp_path}")
+        logger.exception("[Notebook Upload] Failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Failed to upload: {e!s}") from e
+
+    if not uploaded:
+        raise HTTPException(status_code=400, detail="No valid file uploaded")
+
+    info = uploaded[0]
+    fn = info["filename"]
+    p = Path(fn)
+    doc = Document(
+        doc_id=fn,
+        original_filename=fn,
+        file_type=p.suffix[1:].lower() if p.suffix else "unknown",
+        file_size=int(info["size"]),
+        title=title or fn,
+        status=DocumentStatus.READY,
+        created_at=time.time(),
+        updated_at=time.time(),
+    )
+    logger.info("[Notebook Upload] done doc_id=%s thread_id=%s", doc.doc_id, thread_id)
+    return {"document": doc}
 
 
 @router.get("/{notebook_id}/documents", response_model=DocumentListResponse)
-async def list_documents(notebook_id: str):
+async def list_documents(notebook_id: str, user: User = Depends(get_current_user)):
     """List all documents in a notebook."""
+    _notebook_owned_or_404(notebook_id, user.id)
     try:
         documents = _manager().list_documents(notebook_id)
         return {"documents": documents}
@@ -179,8 +217,9 @@ async def list_documents(notebook_id: str):
 
 
 @router.get("/{notebook_id}/documents/{doc_id}", response_model=DocumentResponse)
-async def get_document(notebook_id: str, doc_id: str):
+async def get_document(notebook_id: str, doc_id: str, user: User = Depends(get_current_user)):
     """Get a document's metadata."""
+    _notebook_owned_or_404(notebook_id, user.id)
     try:
         doc = _manager().get_document(notebook_id, doc_id)
         return {"document": doc}
@@ -189,8 +228,9 @@ async def get_document(notebook_id: str, doc_id: str):
 
 
 @router.delete("/{notebook_id}/documents/{doc_id}")
-async def delete_document(notebook_id: str, doc_id: str):
+async def delete_document(notebook_id: str, doc_id: str, user: User = Depends(get_current_user)):
     """Delete a document from a notebook."""
+    _notebook_owned_or_404(notebook_id, user.id)
     try:
         _manager().delete_document(notebook_id, doc_id)
         return {"success": True, "message": f"Deleted document {doc_id}"}
@@ -199,15 +239,19 @@ async def delete_document(notebook_id: str, doc_id: str):
 
 
 @router.get("/{notebook_id}/documents/{doc_id}/status", response_model=ProcessingStatusResponse)
-async def get_document_processing_status(notebook_id: str, doc_id: str):
+async def get_document_processing_status(
+    notebook_id: str, doc_id: str, user: User = Depends(get_current_user)
+):
     """Get the processing status of a document."""
+    _notebook_owned_or_404(notebook_id, user.id)
     status = _manager().get_document_processing_status(notebook_id, doc_id)
     return ProcessingStatusResponse(**status)
 
 
 @router.get("/{notebook_id}/documents/{doc_id}/content")
-async def get_document_content(notebook_id: str, doc_id: str):
+async def get_document_content(notebook_id: str, doc_id: str, user: User = Depends(get_current_user)):
     """Get the converted Markdown content of a document."""
+    _notebook_owned_or_404(notebook_id, user.id)
     try:
         content = _manager().read_document_content(notebook_id, doc_id)
         if content is None:
@@ -225,14 +269,15 @@ async def create_thread(
     request: Request,
     title: str | None = None,
     thread_id: str | None = None,
+    user: User = Depends(get_current_user),
 ):
     """Create a new chat thread in a notebook."""
     try:
-        _manager().get_notebook(notebook_id)
+        _notebook_owned_or_404(notebook_id, user.id)
         created_thread = await create_thread_record(
             request,
             thread_id=thread_id,
-            metadata={"notebook_id": notebook_id},
+            metadata={"notebook_id": notebook_id, "user_id": user.id},
         )
         tracked_thread_id = _manager().create_thread(
             notebook_id,
@@ -245,8 +290,9 @@ async def create_thread(
 
 
 @router.get("/{notebook_id}/threads")
-async def list_threads(notebook_id: str):
+async def list_threads(notebook_id: str, user: User = Depends(get_current_user)):
     """List all threads in a notebook."""
+    _notebook_owned_or_404(notebook_id, user.id)
     try:
         thread_ids = _manager().list_threads(notebook_id)
         return {"thread_ids": thread_ids}

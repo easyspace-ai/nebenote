@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 
 import { type PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { ArtifactTrigger } from "@/components/workspace/artifacts";
@@ -18,6 +18,7 @@ import {
   MESSAGE_LIST_FOLLOWUPS_EXTRA_PADDING_BOTTOM,
 } from "@/components/workspace/messages";
 import { ThreadContext } from "@/components/workspace/messages/context";
+import { NotebookStudioShell } from "@/components/workspace/notebooks/notebook-studio-shell";
 import { ThreadTitle } from "@/components/workspace/thread-title";
 import { TodoList } from "@/components/workspace/todo-list";
 import { TokenUsageIndicator } from "@/components/workspace/token-usage-indicator";
@@ -93,8 +94,9 @@ export default function NotebookNewChatPage() {
 
   return (
     <ThreadContext.Provider value={{ thread, isMock }}>
-      <ChatBox threadId={threadId}>
-        <div className="relative flex size-full min-h-0 justify-between">
+      <NotebookStudioShell notebookId={notebookId}>
+        <ChatBox threadId={threadId}>
+          <div className="relative flex size-full min-h-0 justify-between">
           <header
             className={cn(
               "absolute top-0 right-0 left-0 z-30 flex h-12 shrink-0 items-center px-4",
@@ -188,7 +190,8 @@ export default function NotebookNewChatPage() {
             </div>
           </main>
         </div>
-      </ChatBox>
+        </ChatBox>
+      </NotebookStudioShell>
     </ThreadContext.Provider>
   );
 }

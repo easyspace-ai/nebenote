@@ -214,6 +214,18 @@ class Paths:
         """Host path for the ACP workspace mount source."""
         return _join_host_path(self.host_thread_dir(thread_id), "acp-workspace")
 
+    def host_path_under_base(self, path: Path | str) -> str:
+        """Map a path under ``base_dir`` to the host bind-mount source string.
+
+        When ``DEER_FLOW_HOST_BASE_DIR`` is set (Docker DooD), sandbox mounts must
+        use the host-side DeerFlow data root; this mirrors ``relative_to(base_dir)``
+        onto that host prefix.
+        """
+        resolved = Path(path).resolve()
+        base = self.base_dir.resolve()
+        rel = resolved.relative_to(base)
+        return _join_host_path(self._host_base_dir_str(), *rel.parts)
+
     def ensure_thread_dirs(self, thread_id: str) -> None:
         """Create all standard sandbox directories for a thread.
 
@@ -270,7 +282,15 @@ class Paths:
             raise ValueError(f"Path must start with /{prefix}")
 
         relative = stripped[len(prefix) :].lstrip("/")
-        base = self.sandbox_user_data_dir(thread_id).resolve()
+
+        from deerflow.notebook import get_notebook_manager
+
+        nb_manager = get_notebook_manager()
+        notebook = nb_manager.get_notebook_for_thread(thread_id)
+        if notebook:
+            base = nb_manager.paths.user_data_dir(notebook.notebook_id).resolve()
+        else:
+            base = self.sandbox_user_data_dir(thread_id).resolve()
         actual = (base / relative).resolve()
 
         try:
