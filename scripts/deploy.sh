@@ -56,6 +56,12 @@ esac
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
+# Load environment variables from .env if it exists
+if [ -f "$REPO_ROOT/.env" ]; then
+    # shellcheck disable=SC1091
+    source "$REPO_ROOT/.env"
+fi
+
 DOCKER_DIR="$REPO_ROOT/docker"
 COMPOSE_CMD=(docker compose -p deer-flow -f "$DOCKER_DIR/docker-compose.yaml")
 

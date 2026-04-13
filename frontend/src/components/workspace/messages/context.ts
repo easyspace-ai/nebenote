@@ -19,3 +19,7 @@ export function useThread() {
   }
   return context;
 }
+
+export function useThreadOptional() {
+  return useContext(ThreadContext);
+}

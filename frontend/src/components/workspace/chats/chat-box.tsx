@@ -116,6 +116,10 @@ const ChatBox: React.FC<{ children: React.ReactNode; threadId: string }> = ({
   const artifactHandleDead =
     !artifactPanelOpen && !isNotebookStudio;
 
+  if (isNotebookStudio) {
+    return <div className="min-h-0 min-w-0 flex-1">{children}</div>;
+  }
+
   return (
     <ResizablePanelGroup
       id={`${resizableIdBase}-panels`}
@@ -156,7 +160,7 @@ const ChatBox: React.FC<{ children: React.ReactNode; threadId: string }> = ({
               threadId={threadId}
             />
           ) : (
-            <div className="relative flex size-full justify-center">
+            <div className="relative flex size-full justify-center surface-light rounded-lg">
               <div className="absolute top-1 right-1 z-30">
                 <Button
                   size="icon-sm"
@@ -164,6 +168,7 @@ const ChatBox: React.FC<{ children: React.ReactNode; threadId: string }> = ({
                   onClick={() => {
                     setArtifactsOpen(false);
                   }}
+                  className="cursor-pointer transition-colors duration-200 hover:bg-muted"
                 >
                   <XIcon />
                 </Button>
@@ -177,7 +182,7 @@ const ChatBox: React.FC<{ children: React.ReactNode; threadId: string }> = ({
               ) : (
                 <div className="flex size-full max-w-(--container-width-sm) flex-col justify-center p-4 pt-8">
                   <header className="shrink-0">
-                    <h2 className="text-lg font-medium">Artifacts</h2>
+                    <h2 className="text-lg font-heading font-semibold">Artifacts</h2>
                   </header>
                   <main className="min-h-0 grow">
                     <ArtifactFileList

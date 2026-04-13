@@ -2,7 +2,7 @@ import type { BaseStream } from "@langchain/langgraph-sdk/react";
 
 import type { AgentThreadState } from "../threads";
 
-import { urlOfArtifact } from "./utils";
+import { fetchArtifactWithAuth, urlOfArtifact } from "./utils";
 
 export async function loadArtifactContent({
   filepath,
@@ -18,7 +18,7 @@ export async function loadArtifactContent({
     enhancedFilepath = filepath + "/SKILL.md";
   }
   const url = urlOfArtifact({ filepath: enhancedFilepath, threadId, isMock });
-  const response = await fetch(url);
+  const response = await fetchArtifactWithAuth(url);
   const text = await response.text();
   return { content: text, url };
 }

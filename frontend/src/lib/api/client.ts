@@ -37,7 +37,7 @@ class ApiClient {
 
     const token = this.getToken();
     if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
+      headers.Authorization = `Bearer ${token}`;
     }
 
     try {

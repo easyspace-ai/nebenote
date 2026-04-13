@@ -1,5 +1,5 @@
-import { DashboardHome } from "@/components/home/DashboardHome";
+import { redirect } from "next/navigation";
 
 export default function HomePage() {
-  return <DashboardHome />;
+  redirect("/notebooks");
 }

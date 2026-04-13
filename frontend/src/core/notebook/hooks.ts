@@ -85,7 +85,11 @@ export function useDocuments(notebookId: string | undefined): UseQueryResult<Doc
     queryKey: queryKeys.documents(notebookId!),
     queryFn: async () => {
       const result = await notebookApi.listDocuments(notebookId!);
-      return result.documents;
+      // Filter out transcribed markdown files (those starting with "mnd_")
+      const filteredDocs = result.documents.filter(
+        (doc) => !doc.original_filename?.startsWith("mnd_")
+      );
+      return filteredDocs;
     },
     enabled: !!notebookId,
   });

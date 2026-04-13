@@ -12,15 +12,15 @@ import { cn } from "@/lib/utils";
 
 function navRowClass(isActive: boolean) {
   return cn(
-    "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
     isActive
-      ? "bg-accent/10 text-accent"
-      : "text-muted-foreground hover:bg-secondary/10 hover:text-foreground"
+      ? "bg-muted text-foreground"
+      : "text-muted-foreground hover:bg-muted hover:text-foreground"
   );
 }
 
 function newNotebookButtonClass() {
-  return "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-white bg-accent shadow-md hover:bg-accent/90 transition-all hover:shadow-lg";
+  return "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-foreground bg-muted hover:bg-muted/80 transition-colors";
 }
 
 export function DashboardShell({
@@ -54,7 +54,7 @@ export function DashboardShell({
 
   const recentSidebar = useMemo(() => activeNotebooks, [activeNotebooks]);
 
-  const isSearchActive = pathname === "/";
+  const isSearchActive = pathname === "/notebooks";
   const isNotebooksNav =
     pathname === "/notebooks" || /^\/workspace\/notebooks\/.+/.test(pathname);
   const isSkillsActive = pathname === "/skills";
@@ -65,7 +65,7 @@ export function DashboardShell({
     <div className="bg-background text-foreground flex h-dvh w-full min-h-0 overflow-hidden">
       <aside className="border-sidebar-border bg-sidebar flex w-[252px] shrink-0 flex-col border-r">
         <div className="border-sidebar-border flex h-[52px] shrink-0 items-center justify-between gap-2 border-b px-4">
-          <Link href="/" className="flex min-w-0 flex-1 items-center gap-3" title="MetaNote">
+          <Link href="/notebooks" className="flex min-w-0 flex-1 items-center gap-3" title="MetaNote">
             <img
               src="/logo.jpg"
               alt=""
@@ -82,7 +82,7 @@ export function DashboardShell({
               <span>新建笔记本</span>
             </button>
             <Link
-              href="/"
+              href="/notebooks"
               className={navRowClass(isSearchActive)}
               onClick={() => onSearchNavClick()}
             >
@@ -123,10 +123,10 @@ export function DashboardShell({
                       <Link
                         href={`${studioPrefix}/chats`}
                         className={cn(
-                          "flex items-center gap-2.5 rounded-xl px-2 py-2 text-sm transition-colors",
+                          "flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm transition-colors",
                           active
-                            ? "bg-accent/10 font-medium text-foreground"
-                            : "text-foreground hover:bg-secondary/10"
+                            ? "bg-muted font-medium text-foreground"
+                            : "text-foreground hover:bg-muted"
                         )}
                       >
                         <span
@@ -181,7 +181,7 @@ export function DashboardShell({
         </div>
       </aside>
 
-      <main className="bg-background flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-tl-[1.5rem] shadow-md md:bg-white">
+      <main className="bg-background flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-l">
         {children}
       </main>
     </div>

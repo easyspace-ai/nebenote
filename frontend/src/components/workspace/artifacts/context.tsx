@@ -99,3 +99,7 @@ export function useArtifacts() {
   }
   return context;
 }
+
+export function useArtifactsOptional() {
+  return useContext(ArtifactsContext);
+}

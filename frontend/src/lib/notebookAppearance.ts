@@ -1,4 +1,3 @@
-import type { CSSProperties } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   Atom,
@@ -14,6 +13,7 @@ import {
   Sparkles,
   TreePine,
 } from "lucide-react";
+import type { CSSProperties } from "react";
 
 import type { Notebook } from "@/lib/api/client";
 

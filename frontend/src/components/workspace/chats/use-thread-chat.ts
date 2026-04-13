@@ -23,7 +23,10 @@ export function useThreadChat() {
   );
 
   useEffect(() => {
-    if (pathname.endsWith("/new")) {
+    const isNotebookChatsRoot =
+      /\/workspace\/notebooks\/[^/]+\/chats$/.test(pathname);
+
+    if (pathname.endsWith("/new") || isNotebookChatsRoot) {
       setIsNewThread(true);
       setThreadId(uuid());
       return;

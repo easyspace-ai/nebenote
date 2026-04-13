@@ -169,7 +169,8 @@ async def convert_file_to_markdown(file_path: Path) -> Path | None:
         else:
             text = _do_convert(file_path, pdf_converter)
 
-        md_path = file_path.with_suffix(".md")
+        md_filename = f"mnd_{file_path.stem}.md"
+        md_path = file_path.parent / md_filename
         md_path.write_text(text, encoding="utf-8")
 
         logger.info("Converted %s to markdown: %s (%d chars)", file_path.name, md_path.name, len(text))

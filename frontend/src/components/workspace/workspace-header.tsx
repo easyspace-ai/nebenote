@@ -44,11 +44,11 @@ export function WorkspaceHeader({ className }: { className?: string }) {
         ) : (
           <div className="flex items-center justify-between gap-2">
             {env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY === "true" ? (
-              <Link href="/" className="text-primary ml-2 font-serif">
+              <Link href="/" className="text-primary ml-2 font-heading font-bold tracking-tight text-xl">
                 DeerFlow
               </Link>
             ) : (
-              <div className="text-primary ml-2 cursor-default font-serif">
+              <div className="text-primary ml-2 cursor-default font-heading font-bold tracking-tight text-xl">
                 DeerFlow
               </div>
             )}
@@ -56,19 +56,22 @@ export function WorkspaceHeader({ className }: { className?: string }) {
           </div>
         )}
       </div>
-      <SidebarMenu>
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            isActive={pathname === newChatHref}
-            asChild
-          >
-            <Link className="text-muted-foreground" href={newChatHref}>
-              <MessageSquarePlus size={16} />
-              <span>{t.sidebar.newChat}</span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      </SidebarMenu>
+      {!isNotebookRoute && (
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              isActive={pathname === newChatHref}
+              asChild
+              className="transition-colors duration-200 cursor-pointer hover:bg-sidebar-accent"
+            >
+              <Link className="text-muted-foreground" href={newChatHref}>
+                <MessageSquarePlus size={16} />
+                <span>{t.sidebar.newChat}</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      )}
     </>
   );
 }

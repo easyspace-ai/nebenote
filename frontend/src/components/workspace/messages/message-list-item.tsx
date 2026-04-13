@@ -316,7 +316,7 @@ function RichFileCard({
 
   if (isUploading) {
     return (
-      <div className="bg-background border-border/40 flex max-w-50 min-w-30 flex-col gap-1 rounded-lg border p-3 opacity-60 shadow-sm">
+      <div className="surface-light flex max-w-50 min-w-30 flex-col gap-1 rounded-lg border border-border p-3 opacity-60">
         <div className="flex items-start gap-2">
           <Loader2Icon className="text-muted-foreground mt-0.5 size-4 shrink-0 animate-spin" />
           <span
@@ -363,7 +363,7 @@ function RichFileCard({
   }
 
   return (
-    <div className="bg-background border-border/40 flex max-w-50 min-w-30 flex-col gap-1 rounded-lg border p-3 shadow-sm">
+    <div className="surface-light flex max-w-50 min-w-30 flex-col gap-1 rounded-lg border border-border p-3">
       <div className="flex items-start gap-2">
         <FileIcon className="text-muted-foreground mt-0.5 size-4 shrink-0" />
         <span

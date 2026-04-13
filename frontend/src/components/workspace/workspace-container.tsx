@@ -46,7 +46,7 @@ export function WorkspaceHeader({
   return (
     <header
       className={cn(
-        "top-0 right-0 left-0 z-20 flex h-16 shrink-0 items-center justify-between gap-2 border-b backdrop-blur-sm transition-[width,height] ease-out group-has-data-[collapsible=icon]/sidebar-wrapper:h-12",
+        "top-0 right-0 left-0 z-20 flex h-16 shrink-0 items-center justify-between gap-2 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 transition-[width,height] ease-out group-has-data-[collapsible=icon]/sidebar-wrapper:h-12",
         className,
       )}
       {...props}
@@ -96,7 +96,7 @@ export function WorkspaceHeader({
             href="https://github.com/bytedance/deer-flow"
             target="_blank"
             rel="noopener noreferrer"
-            className="opacity-75 transition hover:opacity-100"
+            className="opacity-75 cursor-pointer transition-all duration-200 hover:opacity-100 hover-subtle"
           >
             <GithubIcon className="size-6" />
           </a>

@@ -3,7 +3,6 @@
 import { formatDistanceToNow } from "date-fns";
 import { enUS, zhCN } from "date-fns/locale";
 import {
-  BookOpen,
   FileText,
   MessageSquare,
   Plus,
@@ -89,38 +88,25 @@ export function NotebookSidebarContent() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-sidebar-border/70 px-3 pb-3">
-        <div className="rounded-2xl border border-sidebar-border/70 bg-sidebar-accent/6 px-3 py-3">
-          <div className="flex items-start gap-3">
-            <div className="bg-sidebar-accent/12 text-sidebar-accent flex size-9 shrink-0 items-center justify-center rounded-xl">
-              <BookOpen className="size-4" />
-            </div>
-            <div className="min-w-0">
-              <p className="line-clamp-2 text-sm font-semibold text-sidebar-foreground">
-                {notebookLoading ? "加载中…" : notebook?.title ?? "未命名项目"}
-              </p>
-              <p className="mt-1 text-xs leading-5 text-sidebar-foreground/65">
-                {(notebook?.documents?.length ?? documents?.length ?? 0)} 份资料
-                · {(notebook?.thread_ids?.length ?? 0)} 个会话
-              </p>
-            </div>
-          </div>
-        </div>
+      <div className="border-sidebar-border/70 px-4 py-3">
+        <p className="line-clamp-1 text-sm font-semibold text-sidebar-foreground">
+          {notebookLoading ? "加载中…" : notebook?.title ?? "未命名项目"}
+        </p>
       </div>
 
-      <Tabs defaultValue="threads" className="flex min-h-0 flex-1 flex-col gap-0 px-3 pb-3">
-        <TabsList className="grid h-10 w-full grid-cols-2 rounded-xl bg-sidebar-accent/8 p-1">
+      <Tabs defaultValue="threads" className="flex min-h-0 flex-1 flex-col gap-0 px-4 pb-4">
+        <TabsList className="grid h-11 w-full grid-cols-2 rounded-none border-b border-sidebar-border/70 bg-transparent p-0">
           <TabsTrigger
             value="threads"
-            className="rounded-lg text-xs data-[state=active]:bg-sidebar data-[state=active]:text-sidebar-foreground"
+            className="h-full rounded-none border-b-2 border-transparent text-sm data-[state=active]:border-sidebar-foreground data-[state=active]:bg-transparent data-[state=active]:text-sidebar-foreground"
           >
-            会话历史
+            对话
           </TabsTrigger>
           <TabsTrigger
             value="uploads"
-            className="rounded-lg text-xs data-[state=active]:bg-sidebar data-[state=active]:text-sidebar-foreground"
+            className="h-full rounded-none border-b-2 border-transparent text-sm data-[state=active]:border-sidebar-foreground data-[state=active]:bg-transparent data-[state=active]:text-sidebar-foreground"
           >
-            上传资料
+            资料
           </TabsTrigger>
         </TabsList>
 
@@ -128,9 +114,9 @@ export function NotebookSidebarContent() {
           value="threads"
           className="mt-0 flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden"
         >
-          <div className="flex items-center justify-between px-1 py-3">
-            <span className="text-[11px] font-medium tracking-[0.18em] text-sidebar-foreground/45 uppercase">
-              Project Chats
+          <div className="flex items-center justify-between py-4">
+            <span className="text-sm font-semibold text-sidebar-foreground">
+              对话
             </span>
             <Button
               type="button"
@@ -140,8 +126,7 @@ export function NotebookSidebarContent() {
               onClick={() => void handleCreateThread()}
               disabled={createThread.isPending}
             >
-              <Plus className="mr-1 size-3.5" />
-              新对话
+              <Plus className="size-4" />
             </Button>
           </div>
 
@@ -153,7 +138,7 @@ export function NotebookSidebarContent() {
                 className={cn(
                   "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors",
                   pathname === `/workspace/notebooks/${notebookId}/chats`
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    ? "bg-muted text-foreground"
                     : "text-sidebar-foreground/70 hover:bg-sidebar-accent/10 hover:text-sidebar-foreground",
                 )}
               >
@@ -178,7 +163,7 @@ export function NotebookSidebarContent() {
                     className={cn(
                       "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors",
                       active
-                        ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                        ? "bg-muted text-foreground"
                         : "text-sidebar-foreground/70 hover:bg-sidebar-accent/10 hover:text-sidebar-foreground",
                     )}
                   >
@@ -205,7 +190,7 @@ export function NotebookSidebarContent() {
           value="uploads"
           className="mt-0 flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden"
         >
-          <div className="space-y-2 py-3">
+          <div className="space-y-2 py-4">
             <input
               id="notebook-sidebar-upload-input"
               type="file"

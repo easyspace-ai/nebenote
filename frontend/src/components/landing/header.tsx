@@ -21,7 +21,7 @@ export async function Header({ className, homeURL, locale }: HeaderProps) {
   return (
     <header
       className={cn(
-        "container-md fixed top-0 right-0 left-0 z-20 mx-auto flex h-16 items-center justify-between backdrop-blur-xs",
+        "container-md fixed top-4 right-0 left-0 z-20 mx-auto flex h-14 items-center justify-between rounded-xl surface px-4 backdrop-blur",
         className,
       )}
     >
@@ -30,8 +30,9 @@ export async function Header({ className, homeURL, locale }: HeaderProps) {
           href={homeURL ?? "https://github.com/bytedance/deer-flow"}
           target={isExternalHome ? "_blank" : "_self"}
           rel={isExternalHome ? "noopener noreferrer" : undefined}
+          className="transition-opacity hover:opacity-80"
         >
-          <h1 className="font-serif text-xl">DeerFlow</h1>
+          <h1 className="font-heading text-xl font-bold tracking-tight">DeerFlow</h1>
         </a>
       </div>
       <nav className="mr-8 ml-auto flex items-center gap-8 text-sm font-medium">
@@ -49,13 +50,6 @@ export async function Header({ className, homeURL, locale }: HeaderProps) {
         </Link>
       </nav>
       <div className="relative">
-        <div
-          className="pointer-events-none absolute inset-0 z-0 h-full w-full rounded-full opacity-30 blur-2xl"
-          style={{
-            background: "linear-gradient(90deg, #ff80b5 0%, #9089fc 100%)",
-            filter: "blur(16px)",
-          }}
-        />
         <Button
           variant="outline"
           size="sm"

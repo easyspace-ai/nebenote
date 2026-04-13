@@ -181,10 +181,10 @@ export function RecentChatList() {
                     key={thread.thread_id}
                     className="group/side-menu-item"
                   >
-                    <SidebarMenuButton isActive={isActive} asChild>
+                    <SidebarMenuButton isActive={isActive} asChild className="transition-colors duration-200">
                       <div>
                         <Link
-                          className="text-muted-foreground block w-full whitespace-nowrap group-hover/side-menu-item:overflow-hidden"
+                          className="text-muted-foreground block w-full whitespace-nowrap group-hover/side-menu-item:overflow-hidden cursor-pointer transition-colors duration-200"
                           href={pathOfThread(thread)}
                         >
                           {titleOfThread(thread)}

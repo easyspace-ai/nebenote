@@ -52,7 +52,7 @@ export function NotebooksListContent({
         <div className="flex min-w-0 flex-wrap items-center gap-3">
           <h1 className="text-foreground text-lg font-bold tracking-tight">笔记本</h1>
           <Link
-            href="/"
+            href="/notebooks"
             className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm font-medium transition-colors"
           >
             <Home className="h-4 w-4" />
@@ -62,7 +62,7 @@ export function NotebooksListContent({
         <button
           type="button"
           onClick={onOpenCreateNotebook}
-          className="bg-foreground text-background hover:bg-foreground/90 inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold shadow-sm transition-colors"
+          className="bg-muted text-foreground hover:bg-muted/80 inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold shadow-sm transition-colors"
         >
           <Plus className="h-4 w-4" />
           新建笔记本

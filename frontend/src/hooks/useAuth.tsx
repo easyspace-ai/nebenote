@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import {
   createContext,
   useContext,
@@ -8,7 +9,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import { useRouter } from "next/navigation";
+
 import { apiClient } from "@/lib/api/client";
 
 interface User {

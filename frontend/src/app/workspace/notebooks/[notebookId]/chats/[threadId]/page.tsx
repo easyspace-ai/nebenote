@@ -23,6 +23,7 @@ import { TodoList } from "@/components/workspace/todo-list";
 import { TokenUsageIndicator } from "@/components/workspace/token-usage-indicator";
 import { Welcome } from "@/components/workspace/welcome";
 import { useI18n } from "@/core/i18n/hooks";
+import { setLastNotebookThread } from "@/core/notebook/session";
 import { useNotification } from "@/core/notification/hooks";
 import { useThreadSettings } from "@/core/settings";
 import { useThreadStream } from "@/core/threads/hooks";
@@ -33,6 +34,7 @@ import { cn } from "@/lib/utils";
 export default function NotebookChatPage() {
   const params = useParams();
   const notebookId = params.notebookId as string;
+  const threadIdFromRoute = params.threadId as string;
   const { t } = useI18n();
   const [showFollowups, setShowFollowups] = useState(false);
   const { threadId, setThreadId, isNewThread, setIsNewThread, isMock } =
@@ -45,6 +47,11 @@ export default function NotebookChatPage() {
     setMounted(true);
   }, []);
 
+  useEffect(() => {
+    if (!threadIdFromRoute) return;
+    setLastNotebookThread(notebookId, threadIdFromRoute);
+  }, [notebookId, threadIdFromRoute]);
+
   const { showNotification } = useNotification();
 
   const [thread, sendMessage, isUploading] = useThreadStream({
@@ -55,6 +62,7 @@ export default function NotebookChatPage() {
     onStart: (createdThreadId) => {
       setThreadId(createdThreadId);
       setIsNewThread(false);
+      setLastNotebookThread(notebookId, createdThreadId);
       // ! Important: Never use next.js router for navigation in this case, otherwise it will cause the thread to re-mount and lose all states. Use native history API instead.
       history.replaceState(null, "", `/workspace/notebooks/${notebookId}/chats/${createdThreadId}`);
     },
@@ -95,17 +103,15 @@ export default function NotebookChatPage() {
     <ThreadContext.Provider value={{ thread, isMock }}>
       <ChatBox threadId={threadId}>
         <div className="relative flex size-full min-h-0 justify-between">
+          {/* Only show actions bar - title is already in notebook top bar */}
           <header
             className={cn(
-              "absolute top-0 right-0 left-0 z-30 flex h-12 shrink-0 items-center px-4",
+              "absolute top-0 right-0 z-30 flex h-12 shrink-0 items-center pr-4",
               isNewThread
                 ? "bg-background/0 backdrop-blur-none"
-                : "bg-background/80 shadow-xs backdrop-blur",
+                : "bg-background/30 backdrop-blur-md"
             )}
           >
-            <div className="flex w-full items-center text-sm font-medium">
-              <ThreadTitle threadId={threadId} thread={thread} />
-            </div>
             <div className="flex items-center gap-2">
               <TokenUsageIndicator messages={thread.messages} />
               <ExportTrigger threadId={threadId} />
@@ -115,26 +121,26 @@ export default function NotebookChatPage() {
           <main className="flex min-h-0 max-w-full grow flex-col">
             <div className="flex size-full justify-center">
               <MessageList
-                className={cn("size-full", !isNewThread && "pt-10")}
+                className={cn("size-full", !isNewThread && "pt-4")}
                 threadId={threadId}
                 thread={thread}
                 paddingBottom={messageListPaddingBottom}
               />
             </div>
-            <div className="absolute right-0 bottom-0 left-0 z-30 flex justify-center px-4">
+            <div className="absolute right-0 bottom-0 left-0 z-30 flex justify-center px-4 pb-2">
               <div
                 className={cn(
                   "relative w-full",
                   isNewThread && "-translate-y-[calc(50vh-96px)]",
                   isNewThread
                     ? "max-w-(--container-width-sm)"
-                    : "max-w-(--container-width-md)",
+                    : "max-w-(--container-width-md)"
                 )}
               >
                 <div className="absolute -top-4 right-0 left-0 z-0">
                   <div className="absolute right-0 bottom-0 left-0">
                     <TodoList
-                      className="bg-background/5"
+                      className="bg-background/40 backdrop-blur-sm"
                       todos={thread.values.todos ?? []}
                       hidden={
                         !thread.values.todos || thread.values.todos.length === 0
@@ -144,7 +150,10 @@ export default function NotebookChatPage() {
                 </div>
                 {mounted ? (
                   <InputBox
-                    className={cn("bg-background/5 w-full -translate-y-4")}
+                    className={cn(
+                      "bg-background/60 backdrop-blur-md border border-border/40 w-full -translate-y-4 shadow-sm",
+                      !isNewThread && "mt-2"
+                    )}
                     isNewThread={isNewThread}
                     threadId={threadId}
                     notebookId={notebookId}

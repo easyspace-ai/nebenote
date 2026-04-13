@@ -18,7 +18,7 @@ export function Hero({ className }: { className?: string }) {
         className,
       )}
     >
-      <div className="absolute inset-0 z-0 bg-black/40">
+      <div className="absolute inset-0 z-0 bg-linear-to-br from-neutral-900 via-black to-neutral-950/90">
         <Galaxy
           mouseRepulsion={false}
           starSpeed={0.2}
@@ -37,25 +37,27 @@ export function Hero({ className }: { className?: string }) {
         flickerChance={0.25}
       />
       <div className="container-md relative z-10 mx-auto flex h-screen flex-col items-center justify-center">
-        <h1 className="flex items-center gap-2 text-4xl font-bold md:text-6xl">
-          <WordRotate
-            words={[
-              "Deep Research",
-              "Collect Data",
-              "Analyze Data",
-              "Generate Webpages",
-              "Vibe Coding",
-              "Generate Slides",
-              "Generate Images",
-              "Generate Podcasts",
-              "Generate Videos",
-              "Generate Songs",
-              "Organize Emails",
-              "Do Anything",
-              "Learn Anything",
-            ]}
-          />{" "}
-          <div>with DeerFlow</div>
+        <h1 className="flex flex-wrap items-center justify-center gap-3 font-heading text-4xl font-bold md:text-6xl">
+          <span className="text-gradient">
+            <WordRotate
+              words={[
+                "Deep Research",
+                "Collect Data",
+                "Analyze Data",
+                "Generate Webpages",
+                "Vibe Coding",
+                "Generate Slides",
+                "Generate Images",
+                "Generate Podcasts",
+                "Generate Videos",
+                "Generate Songs",
+                "Organize Emails",
+                "Do Anything",
+                "Learn Anything",
+              ]}
+            />
+          </span>{" "}
+          <span className="text-white">with DeerFlow</span>
         </h1>
         {env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY && (
           <a
@@ -79,8 +81,8 @@ export function Hero({ className }: { className?: string }) {
           different levels of tasks that could take minutes to hours.
         </p>
         <Link href="/workspace">
-          <Button className="size-lg mt-8 scale-108" size="lg">
-            <span className="text-md">Get Started with 2.0</span>
+          <Button className="size-lg mt-8 scale-108 bg-accent hover:bg-accent/90 text-accent-foreground" size="lg">
+            <span className="text-md font-semibold">Get Started with 2.0</span>
             <ChevronRightIcon className="size-4" />
           </Button>
         </Link>

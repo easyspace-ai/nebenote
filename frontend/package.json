@@ -1,5 +1,5 @@
 {
-  "name": "deer-flow-frontend",
+  "name": "metanote",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -75,7 +75,7 @@
     "ogl": "^1.0.11",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-resizable-panels": "^4.4.1",
+    "react-resizable-panels": "^4.10.0",
     "rehype-katex": "^7.0.1",
     "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.1",

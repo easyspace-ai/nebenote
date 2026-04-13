@@ -30,7 +30,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { CodeEditor } from "@/components/workspace/code-editor";
 import { useArtifactContent } from "@/core/artifacts/hooks";
-import { urlOfArtifact } from "@/core/artifacts/utils";
+import { downloadArtifactWithAuth, fetchArtifactWithAuth, urlOfArtifact } from "@/core/artifacts/utils";
 import { useI18n } from "@/core/i18n/hooks";
 import { installSkill } from "@/core/skills/api";
 import { streamdownPlugins } from "@/core/streamdown";
@@ -192,13 +192,26 @@ export function ArtifactFileDetail({
                 icon={SquareArrowOutUpRightIcon}
                 label={t.common.openInNewWindow}
                 tooltip={t.common.openInNewWindow}
-                onClick={() => {
-                  const w = window.open(
-                    urlOfArtifact({ filepath, threadId, isMock }),
-                    "_blank",
-                    "noopener,noreferrer",
-                  );
-                  if (w) w.opener = null;
+                onClick={async () => {
+                  try {
+                    const response = await fetchArtifactWithAuth(
+                      urlOfArtifact({ filepath, threadId, isMock }),
+                    );
+                    if (!response.ok) {
+                      throw new Error(await response.text());
+                    }
+                    const blob = await response.blob();
+                    const objectUrl = URL.createObjectURL(blob);
+                    const w = window.open(objectUrl, "_blank", "noopener,noreferrer");
+                    if (w) {
+                      w.opener = null;
+                    }
+                    setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+                  } catch (error) {
+                    toast.error(
+                      error instanceof Error ? error.message : "Open artifact failed",
+                    );
+                  }
                 }}
               />
             )}
@@ -224,18 +237,14 @@ export function ArtifactFileDetail({
                 icon={DownloadIcon}
                 label={t.common.download}
                 tooltip={t.common.download}
-                onClick={() => {
-                  const w = window.open(
-                    urlOfArtifact({
-                      filepath,
-                      threadId,
-                      download: true,
-                      isMock,
-                    }),
-                    "_blank",
-                    "noopener,noreferrer",
-                  );
-                  if (w) w.opener = null;
+                onClick={async () => {
+                  try {
+                    await downloadArtifactWithAuth({ filepath, threadId, isMock });
+                  } catch (error) {
+                    toast.error(
+                      error instanceof Error ? error.message : "Download artifact failed",
+                    );
+                  }
                 }}
               />
             )}
@@ -268,6 +277,7 @@ export function ArtifactFileDetail({
           <iframe
             className="size-full"
             src={urlOfArtifact({ filepath, threadId, isMock })}
+            title="Artifact content"
           />
         )}
       </ArtifactContent>
