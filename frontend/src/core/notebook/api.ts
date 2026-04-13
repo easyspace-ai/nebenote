@@ -1,6 +1,7 @@
 // API client for Notebook operations
 
 import { getAPIClient } from '@/core/api';
+import { bearerAuthHeaders } from '@/core/auth/bearer-headers';
 
 import type {
   Notebook,
@@ -12,27 +13,13 @@ import type {
 
 const API_BASE = '/api/notebooks';
 
-/** Same key as `lib/api/client.ts` / `useAuth` — gateway `get_current_user` expects Bearer. */
-const TOKEN_STORAGE_KEY = 'deerflow_token';
-
-function bearerHeaders(): Record<string, string> {
-  if (typeof window === 'undefined') {
-    return {};
-  }
-  const token = localStorage.getItem(TOKEN_STORAGE_KEY);
-  if (!token) {
-    return {};
-  }
-  return { Authorization: `Bearer ${token}` };
-}
-
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
       ...(options?.headers as Record<string, string> | undefined),
-      ...bearerHeaders(),
+      ...bearerAuthHeaders(),
     },
   });
 
@@ -96,7 +83,7 @@ export async function uploadDocument(
     method: 'POST',
     body: formData,
     headers: {
-      ...bearerHeaders(),
+      ...bearerAuthHeaders(),
     },
   });
 

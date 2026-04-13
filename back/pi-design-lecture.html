@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>pi 的设计艺术：构建生产级 Coding Agent 的架构决策</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/reveal.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/theme/white.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/plugin/highlight/monokai.css">
+    <style>
+        /* 自定义学术风格样式 */
+        .reveal h1, .reveal h2, .reveal h3 {
+            font-family: "Source Sans Pro", sans-serif;
+            font-weight: 700;
+            color: #2c3e50;
+        }
+        .reveal p, .reveal li {
+            font-family: "Source Sans Pro", sans-serif;
+            font-size: 1.2em;
+            line-height: 1.6;
+            color: #34495e;
+        }
+        .reveal pre code {
+            font-size: 0.9em;
+            line-height: 1.4;
+            max-height: 600px;
+        }
+        .chapter-title {
+            color: #2980b9;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .decision-box {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+            margin: 15px 0;
+        }
+        .trade-off-container {
+            display: flex;
+            justify-content: space-between;
+            margin: 20px 0;
+            gap: 20px;
+        }
+        .trade-off-item {
+            flex: 1;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        .gain {
+            background-color: #e8f5e9;
+            border: 1px solid #81c784;
+        }
+        .loss {
+            background-color: #ffebee;
+            border: 1px solid #ef5350;
+        }
+        .trade-off-item h4 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+        .key-point {
+            font-weight: 600;
+            color: #2980b9;
+        }
+    </style>
+</head>
+<body>
+    <div class="reveal">
+        <div class="slides">
+            <!-- 封面 -->
+            <section>
+                <h1 style="font-size: 2.5em;">pi 的设计艺术</h1>
+                <h2 style="font-size: 1.8em; color: #3498db;">构建生产级 Coding Agent 的架构决策</h2>
+                <div style="margin-top: 60px;">
+                    <p style="font-size: 1.2em;">符合高校教学规范的交互式演示文稿</p>
+                    <p style="font-size: 1em; margin-top: 30px; color: #7f8c8d;">基于 pi-mono v0.66.0</p>
+                </div>
+            </section>
+
+            <!-- 目录 -->
+            <section>
+                <h2 class="chapter-title">目录</h2>
+                <div style="columns: 2; column-gap: 50px;">
+                    <ul style="list-style-type: none; padding: 0;">
+                        <li>第 1 章：不是又一个 LLM 包装器</li>
+                        <li>第 2 章：七个包不是七个项目</li>
+                        <li>第 3 章：怎样高效阅读这个仓库</li>
+                        <li>第 4 章：Provider 不是 Adapter</li>
+                        <li>第 5 章：消息变换 — 跨模型交接的隐藏复杂度</li>
+                        <li>第 6 章：统一事件流设计</li>
+                        <li>第 7 章：OAuth — 统一认证的隐藏复杂度</li>
+                        <li>第 8 章：agentLoop — 发动机只管转</li>
+                        <li>第 9 章：工具执行不是插件调用</li>
+                        <li>第 10 章：Agent — 循环之上的有状态壳</li>
+                        <li>第 11 章：会话树 — 比"聊天记录"更好的数据模型</li>
+                        <li>第 12 章：Compaction — 把无限对话装进有限窗口</li>
+                        <li>第 13 章：三级配置覆盖</li>
+                        <li>第 14 章：System Prompt 是一套装配流程</li>
+                        <li>第 15 章：Extension 系统 — 让产品长出新器官</li>
+                        <li>第 16 章：Skill 机制 — 用文档替代代码</li>
+                    </ul>
+                    <ul style="list-style-type: none; padding: 0;">
+                        <li>第 17 章：Resource Loader — 一切外部资源的统一入口</li>
+                        <li>第 18 章：Model Registry — 模型不只是一个 ID</li>
+                        <li>第 19 章：工具设计原则 — 约束即保护</li>
+                        <li>第 20 章：edit 的设计 — 为什么不能直接写文件</li>
+                        <li>第 21 章：read 的设计 — 为什么不是简单的 cat</li>
+                        <li>第 22 章：bash 与外部世界的边界</li>
+                        <li>第 23 章：find 和 grep — 结构化搜索替代万能 bash</li>
+                        <li>第 24 章：pi-tui — 在终端里做应用</li>
+                        <li>第 25 章：编辑器组件 — 交互复杂度的集中地</li>
+                        <li>第 26 章：RPC 模式 — pi 作为后端服务</li>
+                        <li>第 27 章：pi-web-ui — 浏览器里的复用</li>
+                        <li>第 28 章：mom — Slack 里的 Coding Agent</li>
+                        <li>第 29 章：pods — 为什么这个仓库还要管 GPU</li>
+                        <li>第 30 章：极简核心，能力外置</li>
+                        <li>第 31 章：反主流选择背后的判断</li>
+                        <li>第 32 章：这套架构的适用边界</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- 第1章：不是又一个 LLM 包装器 -->
+            <section>
+                <h2 class="chapter-title">第 1 章：不是又一个 LLM 包装器</h2>
+                <div class="decision-box">
+                    <p class="key-point">核心定位：</p>
+                    <p>pi 是一个 agent 运行时，不是一个调用库</p>
+                </div>
+                <div class="decision-box">
+                    <p class="key-point">关键差异：</p>
+                    <ul>
+                        <li><strong>LangChain</strong>：开发者定义的链式编排</li>
+                        <li><strong>Vercel AI SDK</strong>：统一流式调用层</li>
+                        <li><strong>CrewAI</strong>：多 agent 团队协作</li>
+                        <li><strong>pi</strong>：LLM 驱动的循环引擎</li>
+                    </ul>
+                </div>
+                <div class="trade-off-container">
+                    <div class="trade-off-item gain">
+                        <h4>得到了什么</h4>
+                        <p>更灵活的任务执行，LLM 自主决定工具调用</p>
+                    </div>
+                    <div class="trade-off-item loss">
+                        <h4>放弃了什么</h4>
+                        <p>失去了显式控制流的可预测性</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 第2章：七个包不是七个项目 -->
+            <section>
+                <h2 class="chapter-title">第 2 章：七个包不是七个项目</h2>
+                <div class="decision-box">
+                    <p class="key-point">核心架构：洋葱分层</p>
+                    <ul>
+                        <li>L1: pi-ai — 统一 LLM 调用层</li>
+                        <li>L2: pi-agent-core — 循环引擎</li>
+                        <li>L3: pi-coding-agent — 产品内核</li>
+                        <li>L4: 产品壳（CLI、Slack Bot、Web UI）</li>
+                    </ul>
+                </div>
+                <div class="decision-box">
+                    <p class="key-point">Lockstep 版本策略</p>
+                    <p>所有 7 个包始终使用同一个版本号</p>
+                </div>
+                <div class="trade-off-container">
+                    <div class="trade-off-item gain">
+                        <h4>得到了什么</h4>
+                        <p>强制分层纪律，独立测试，渐进式采用</p>
+                    </div>
+                    <div class="trade-off-item loss">
+                        <h4>放弃了什么</h4>
+                        <p>开发环境复杂度，单个 bug 修复需升级全部包</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 第8章：agentLoop — 发动机只管转 -->
+            <section>
+                <h2 class="chapter-title">第 8 章：agentLoop — 发动机只管转</h2>
+                <div class="decision-box">
+                    <p class="key-point">核心设计：无状态循环引擎</p>
+                    <p>agentLoop 本身是无状态的，不持有任何跨次调用的状态</p>
+                </div>
+                <div class="decision-box">
+                    <p class="key-point">循环逻辑：</p>
+                    <ol>
+                        <li>调用 LLM → 获取响应</li>
+                        <li>检查是否有工具调用</li>
+                        <li>并行/串行执行工具</li>
+                        <li>将结果加入消息列表 → 再次调用 LLM</li>
+                        <li>直到 LLM 决定停止或收到外部终止信号</li>
+                    </ol>
+                </div>
+                <div class="trade-off-container">
+                    <div class="trade-off-item gain">
+                        <h4>得到了什么</h4>
+                        <p>极致的复用性，可测试性，控制灵活性</p>
+                    </div>
+                    <div class="trade-off-item loss">
+                        <h4>放弃了什么</h4>
+                        <p>上层需要管理状态，增加了使用复杂度</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 第14章：System Prompt 是一套装配流程 -->
+            <section>
+                <h2 class="chapter-title">第 14 章：System Prompt 是一套装配流程</h2>
+                <div class="decision-box">
+                    <p class="key-point">核心思想：</p>
+                    <p>System Prompt 不是静态字符串，而是运行时动态组装的产物</p>
+                </div>
+                <div class="decision-box">
+                    <p class="key-point">装配来源：</p>
+                    <ul>
+                        <li>基础模板（内置系统提示）</li>
+                        <li>AGENTS.md 文件（项目特定配置）</li>
+                        <li>用户自定义配置</li>
+                        <li>Extension 注入的内容</li>
+                    </ul>
+                </div>
+                <div class="trade-off-container">
+                    <div class="trade-off-item gain">
+                        <h4>得到了什么</h4>
+                        <p>高度定制化，动态适应不同场景</p>
+                    </div>
+                    <div class="trade-off-item loss">
+                        <h4>放弃了什么</h4>
+                        <p>增加了复杂度，调试难度提高</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 第15章：Extension 系统 — 让产品长出新器官 -->
+            <section>
+                <h2 class="chapter-title">第 15 章：Extension 系统 — 让产品长出新器官</h2>
+                <div class="decision-box">
+                    <p class="key-point">核心能力：</p>
+                    <p>Extension 是 TypeScript 代码模块，可注册新工具、命令、事件处理器和 UI 扩展</p>
+                </div>
+                <div class="decision-box">
+                    <p class="key-point">设计原则：</p>
+                    <ul>
+                        <li>显式注册：所有扩展必须显式注册</li>
+                        <li>隔离运行：每个 Extension 有独立的上下文</li>
+                        <li>生命周期管理：支持加载、卸载、更新</li>
+                    </ul>
+                </div>
+                <div class="trade-off-container">
+                    <div class="trade-off-item gain">
+                        <h4>得到了什么</h4>
+                        <p>无限扩展性，产品功能可动态增长</p>
+                    </div>
+                    <div class="trade-off-item loss">
+                        <h4>放弃了什么</h4>
+                        <p>增加了系统复杂度，安全风险提高</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 第30章：极简核心，能力外置 -->
+            <section>
+                <h2 class="chapter-title">第 30 章：极简核心，能力外置</h2>
+                <div class="decision-box">
+                    <p class="key-point">核心哲学：</p>
+                    <p>核心代码保持极简，所有非核心能力外置</p>
+                </div>
+                <div class="decision-box">
+                    <p class="key-point">实践体现：</p>
+                    <ul>
+                        <li>agentLoop 只有 ~1,900 行代码</li>
+                        <li>130+ 工具全部外置实现</li>
+                        <li>Skill 机制用文档替代代码逻辑</li>
+                    </ul>
+                </div>
+                <div class="trade-off-container">
+                    <div class="trade-off-item gain">
+                        <h4>得到了什么</h4>
+                        <p>核心稳定，扩展灵活，维护成本低</p>
+                    </div>
+                    <div class="trade-off-item loss">
+                        <h4>放弃了什么</h4>
+                        <p>核心功能有限，依赖生态系统</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 总结 -->
+            <section>
+                <h2 class="chapter-title">总结：pi 架构的核心决策</h2>
+                <div class="decision-box">
+                    <p class="key-point">设计哲学</p>
+                    <ul>
+                        <li>极简核心，能力外置</li>
+                        <li>循环引擎无状态，上层管理状态</li>
+                        <li>显式注册优于隐式发现</li>
+                        <li>文档驱动优于代码驱动</li>
+                    </ul>
+                </div>
+                <div class="decision-box">
+                    <p class="key-point">架构优势</p>
+                    <ul>
+                        <li>高度可扩展，支持动态功能增长</li>
+                        <li>核心稳定，易于测试和维护</li>
+                        <li>灵活适配不同使用场景</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- Q&A -->
+            <section>
+                <h1 style="color: #2980b9;">Q&A</h1>
+                <p style="font-size: 1.5em; margin-top: 40px;">感谢观看！</p>
+                <p style="font-size: 1.2em; color: #7f8c8d;">参考资料：pi-mono v0.66.0 官方文档</p>
+            </section>
+        </div>
+   

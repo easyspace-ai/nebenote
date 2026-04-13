@@ -16,6 +16,7 @@ from deerflow.notebook.models import (
 )
 from deerflow.notebook.paths import NotebookPaths, get_notebook_paths
 from deerflow.uploads.manager import delete_file_safe, normalize_filename
+from deerflow.uploads.pipeline import CONVERSION_ERROR_MARKER
 from deerflow.utils.file_conversion import CONVERTIBLE_EXTENSIONS
 
 logger = logging.getLogger(__name__)
@@ -155,20 +156,44 @@ class NotebookManager:
         notebook.updated_at = time.time()
         self._save_notebook(notebook)
 
+    def _conversion_error_path(self, uploads_dir: Path, stem: str) -> Path:
+        return uploads_dir / f"{stem}{CONVERSION_ERROR_MARKER}"
+
+    def _document_status_from_files(self, notebook_id: str, path: Path) -> tuple[DocumentStatus, str | None]:
+        """Infer processing state from companion ``mnd_*.md`` / ``*.conversion-error`` files."""
+        uploads_dir = self.paths.uploads_dir(notebook_id)
+        stem = path.stem
+        err = self._conversion_error_path(uploads_dir, stem)
+        if err.is_file():
+            try:
+                msg = err.read_text(encoding="utf-8").strip()
+            except OSError:
+                msg = "Conversion failed"
+            return DocumentStatus.FAILED, (msg[:2000] if msg else "Conversion failed")
+
+        suffix = path.suffix.lower()
+        if suffix in CONVERTIBLE_EXTENSIONS:
+            mnd = uploads_dir / f"mnd_{stem}.md"
+            if not mnd.is_file():
+                return DocumentStatus.PROCESSING, None
+        return DocumentStatus.READY, None
+
     def _document_from_upload_path(self, notebook_id: str, path: Path) -> Document:
         st = path.stat()
         suffix = path.suffix.lower()
         file_type = suffix[1:] if suffix else "unknown"
         fn = path.name
+        status, err_msg = self._document_status_from_files(notebook_id, path)
         return Document(
             doc_id=fn,
             original_filename=fn,
             file_type=file_type,
             file_size=st.st_size,
             title=fn,
-            status=DocumentStatus.READY,
+            status=status,
             created_at=st.st_mtime,
             updated_at=st.st_mtime,
+            error_message=err_msg,
         )
 
     def list_documents(self, notebook_id: str) -> list[Document]:
@@ -179,6 +204,11 @@ class NotebookManager:
         out: list[Document] = []
         for p in sorted(uploads.iterdir(), key=lambda x: x.name.lower()):
             if p.name.startswith(".") or not p.is_file():
+                continue
+            # Conversion pipeline writes ``mnd_<stem>.md`` next to the source; not a user-facing row.
+            if p.suffix.lower() == ".md" and p.name.startswith("mnd_"):
+                continue
+            if p.name.endswith(CONVERSION_ERROR_MARKER):
                 continue
             try:
                 out.append(self._document_from_upload_path(notebook_id, p))
@@ -208,6 +238,11 @@ class NotebookManager:
         mnd_new = uploads_dir / f"mnd_{new_stem}.md"
         if mnd_old.is_file() and not mnd_new.exists():
             mnd_old.rename(mnd_new)
+
+        err_old = self._conversion_error_path(uploads_dir, old_stem)
+        err_new = self._conversion_error_path(uploads_dir, new_stem)
+        if err_old.is_file() and not err_new.exists():
+            err_old.rename(err_new)
 
     def rename_document(self, notebook_id: str, doc_id: str, title: str) -> Document:
         """Rename an upload by changing its on-disk filename and returning updated metadata."""
@@ -249,11 +284,13 @@ class NotebookManager:
             convertible_extensions=CONVERTIBLE_EXTENSIONS,
         )
         # Also clean up current conversion naming convention: mnd_<stem>.md
-        (uploads_dir / f"mnd_{Path(safe).stem}.md").unlink(missing_ok=True)
+        stem = Path(safe).stem
+        (uploads_dir / f"mnd_{stem}.md").unlink(missing_ok=True)
+        self._conversion_error_path(uploads_dir, stem).unlink(missing_ok=True)
         logger.info("Deleted upload %s from notebook %s", safe, notebook_id)
 
     def get_document_processing_status(self, notebook_id: str, doc_id: str) -> dict[str, Any]:
-        """Upload pipeline runs synchronously; files are ready once present."""
+        """Reflect async conversion: processing until ``mnd_*.md`` exists or ``*.conversion-error``."""
         try:
             doc = self.get_document(notebook_id, doc_id)
             return {

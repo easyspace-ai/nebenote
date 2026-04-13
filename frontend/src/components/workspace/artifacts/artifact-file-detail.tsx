@@ -8,7 +8,7 @@ import {
   SquareArrowOutUpRightIcon,
   XIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Streamdown } from "streamdown";
 
@@ -44,6 +44,85 @@ import { useThreadOptional } from "../messages/context";
 import { Tooltip } from "../tooltip";
 
 import { useArtifacts } from "./context";
+
+/** iframe cannot send Authorization; fetch with auth then use a blob URL (MP3/PDF/etc.). */
+function AuthenticatedArtifactBlobFrame({
+  filepath,
+  threadId,
+  isMock,
+}: {
+  filepath: string;
+  threadId: string;
+  isMock: boolean;
+}) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const blobUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setSrc(null);
+    setError(null);
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = null;
+    }
+
+    void (async () => {
+      try {
+        const url = urlOfArtifact({ filepath, threadId, isMock });
+        const res = await fetchArtifactWithAuth(url);
+        if (cancelled) return;
+        if (!res.ok) {
+          const detail = await res.text().catch(() => res.statusText);
+          setError(detail || `HTTP ${res.status}`);
+          return;
+        }
+        const blob = await res.blob();
+        if (cancelled) return;
+        const objectUrl = URL.createObjectURL(blob);
+        if (cancelled) {
+          URL.revokeObjectURL(objectUrl);
+          return;
+        }
+        if (blobUrlRef.current) {
+          URL.revokeObjectURL(blobUrlRef.current);
+        }
+        blobUrlRef.current = objectUrl;
+        setSrc(objectUrl);
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Failed to load artifact");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
+      }
+    };
+  }, [filepath, threadId, isMock]);
+
+  if (error) {
+    return (
+      <div className="text-muted-foreground flex size-full items-center justify-center p-4 text-center text-sm">
+        {error}
+      </div>
+    );
+  }
+  if (!src) {
+    return (
+      <div className="text-muted-foreground flex size-full items-center justify-center text-sm">
+        <LoaderIcon className="mr-2 h-5 w-5 animate-spin" />
+        Loading…
+      </div>
+    );
+  }
+  return <iframe className="size-full" src={src} title="Artifact content" />;
+}
 
 export function ArtifactFileDetail({
   className,
@@ -276,10 +355,10 @@ export function ArtifactFileDetail({
           />
         )}
         {!isCodeFile && (
-          <iframe
-            className="size-full"
-            src={urlOfArtifact({ filepath, threadId, isMock })}
-            title="Artifact content"
+          <AuthenticatedArtifactBlobFrame
+            filepath={filepath}
+            threadId={threadId}
+            isMock={isMock}
           />
         )}
       </ArtifactContent>

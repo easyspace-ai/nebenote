@@ -644,6 +644,14 @@ title:
   max_words: 6
   max_chars: 60
   model_name: null # Use default model (first model in models list)
+  # Title language is controlled by this prompt (code default asks for 简体中文).
+  # Override for other languages, e.g. English:
+  # prompt_template: >-
+  #   Generate a concise title (max {max_words} words) for this conversation.
+  #   User: {user_msg}
+  #   Assistant: {assistant_msg}
+  #
+  #   Return ONLY the title, no quotes, no explanation.
 
 # ============================================================================
 # Summarization Configuration

@@ -1,10 +1,9 @@
 """Notebook API endpoints."""
 
 import logging
-import time
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
 from app.gateway.deps import get_checkpointer, get_store
@@ -12,13 +11,13 @@ from app.gateway.routers.auth import User, get_current_user
 from app.gateway.routers.threads import THREADS_NS, create_thread_record
 from deerflow.notebook import (
     Document,
-    DocumentStatus,
     Notebook,
     NotebookManager,
     NotebookSettings,
     get_notebook_manager,
 )
-from deerflow.uploads.pipeline import process_upload_items
+from deerflow.uploads.pipeline import process_upload_items, run_upload_markdown_conversion
+from deerflow.utils.file_conversion import CONVERTIBLE_EXTENSIONS
 
 logger = logging.getLogger(__name__)
 
@@ -199,6 +198,7 @@ async def delete_notebook(notebook_id: str, user: User = Depends(get_current_use
 async def upload_document(
     notebook_id: str,
     request: Request,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     title: str | None = None,
     user: User = Depends(get_current_user),
@@ -223,6 +223,7 @@ async def upload_document(
             thread_id,
             [(raw_name, content)],
             notebook_id=notebook_id,
+            convert=False,
         )
     except Exception as e:
         logger.exception("[Notebook Upload] Failed: %s", e)
@@ -233,18 +234,15 @@ async def upload_document(
 
     info = uploaded[0]
     fn = info["filename"]
-    p = Path(fn)
-    doc = Document(
-        doc_id=fn,
-        original_filename=fn,
-        file_type=p.suffix[1:].lower() if p.suffix else "unknown",
-        file_size=int(info["size"]),
-        title=title or fn,
-        status=DocumentStatus.READY,
-        created_at=time.time(),
-        updated_at=time.time(),
-    )
-    logger.info("[Notebook Upload] done doc_id=%s thread_id=%s", doc.doc_id, thread_id)
+    file_path = Path(info["path"])
+    if file_path.suffix.lower() in CONVERTIBLE_EXTENSIONS:
+        background_tasks.add_task(run_upload_markdown_conversion, file_path, thread_id)
+
+    doc = _manager().get_document(notebook_id, fn)
+    display_title = (title.strip() if title else "") or fn
+    if display_title != doc.title:
+        doc = doc.model_copy(update={"title": display_title})
+    logger.info("[Notebook Upload] done doc_id=%s thread_id=%s status=%s", doc.doc_id, thread_id, doc.status)
     return {"document": doc}
 
 

@@ -14,6 +14,25 @@ function getFilenameFromPath(path: string): string {
   return lastSegment && lastSegment.length > 0 ? lastSegment : "artifact";
 }
 
+/**
+ * Build the `{path:path}` segment for Gateway `/api/threads/{id}/artifacts/{path}`.
+ * Strips leading slashes, encodes each segment (Unicode filenames), and avoids
+ * `.../artifactsmnt/...` when the stored path omits a leading `/`.
+ */
+export function encodeArtifactVirtualPathForUrl(filepath: string): string {
+  const t = filepath.trim();
+  if (t.startsWith("write-file:")) {
+    return t;
+  }
+  const stripped = t.replace(/^\/+/, "");
+  if (!stripped) return "";
+  return stripped
+    .split("/")
+    .filter((s) => s.length > 0)
+    .map((seg) => encodeURIComponent(seg))
+    .join("/");
+}
+
 function parseFilenameFromDisposition(
   contentDisposition: string | null,
   fallback: string,
@@ -93,10 +112,13 @@ export function urlOfArtifact({
   download?: boolean;
   isMock?: boolean;
 }) {
+  const pathPart = encodeArtifactVirtualPathForUrl(filepath);
+  const suffix = pathPart ? `/${pathPart}` : "";
+  const q = download ? "?download=true" : "";
   if (isMock) {
-    return `${getBackendBaseURL()}/mock/api/threads/${threadId}/artifacts${filepath}${download ? "?download=true" : ""}`;
+    return `${getBackendBaseURL()}/mock/api/threads/${threadId}/artifacts${suffix}${q}`;
   }
-  return `${getBackendBaseURL()}/api/threads/${threadId}/artifacts${filepath}${download ? "?download=true" : ""}`;
+  return `${getBackendBaseURL()}/api/threads/${threadId}/artifacts${suffix}${q}`;
 }
 
 export function extractArtifactsFromThread(thread: AgentThread) {
@@ -104,5 +126,7 @@ export function extractArtifactsFromThread(thread: AgentThread) {
 }
 
 export function resolveArtifactURL(absolutePath: string, threadId: string) {
-  return `${getBackendBaseURL()}/api/threads/${threadId}/artifacts${absolutePath}`;
+  const pathPart = encodeArtifactVirtualPathForUrl(absolutePath);
+  const suffix = pathPart ? `/${pathPart}` : "";
+  return `${getBackendBaseURL()}/api/threads/${threadId}/artifacts${suffix}`;
 }

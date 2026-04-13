@@ -55,6 +55,11 @@ function collectArtifactPathsFromThreadValues(
   return ordered;
 }
 
+/** Studio 产物列表隐藏中间脚本/结构化文件，避免与 md/html 等主交付重复展示。 */
+function isHiddenNotebookArtifactPath(filepath: string): boolean {
+  return getFileName(filepath).toLowerCase().endsWith(".json");
+}
+
 // 生成功能配置 - 可在这里编辑添加新的生成类型
 export interface GenerationConfig {
   id: string;
@@ -84,8 +89,9 @@ export const generationConfigs: GenerationConfig[] = [
   {
     id: "mindmap",
     title: "思维导图",
-    description: "生成Markdown思维导图",
-    prompt: "请基于上述内容，生成一个markdown格式的思维导图，清晰展示知识结构。",
+    description: "用 chart-visualization 生成导图图片（非 Mermaid 文本）",
+    prompt:
+      "请使用 mindmap 技能，基于上述内容生成一张思维导图",
     icon: Map,
   },
   // {
@@ -238,6 +244,7 @@ export function RightPanel({ notebookId }: RightPanelProps) {
         if (!group) continue;
         for (const filepath of group.artifacts) {
           if (!filepath || seen.has(filepath)) continue;
+          if (isHiddenNotebookArtifactPath(filepath)) continue;
           seen.add(filepath);
           items.push({
             key: `${group.threadId}:${filepath}`,

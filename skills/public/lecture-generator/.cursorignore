@@ -1,0 +1,23 @@
+# Generated outputs - ignore from Cursor indexing
+.assets/output/
+.assets/temp/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+
+# Logs
+*.log
+logs/

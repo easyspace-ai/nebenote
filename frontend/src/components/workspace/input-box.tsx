@@ -55,6 +55,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { bearerAuthHeaders } from "@/core/auth/bearer-headers";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import { useModels } from "@/core/models/hooks";
@@ -411,7 +412,10 @@ export function InputBox({
 
     fetch(`${getBackendBaseURL()}/api/threads/${threadId}/suggestions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...bearerAuthHeaders(),
+      },
       body: JSON.stringify({
         messages: recent,
         n: 3,

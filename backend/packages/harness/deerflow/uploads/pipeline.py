@@ -13,6 +13,9 @@ from deerflow.utils.file_conversion import CONVERTIBLE_EXTENSIONS, convert_file_
 
 logger = logging.getLogger(__name__)
 
+# Written next to the uploaded file when async markdown conversion fails (notebook uploads).
+CONVERSION_ERROR_MARKER = ".conversion-error"
+
 
 def _make_file_sandbox_writable(file_path: os.PathLike[str] | str) -> None:
     file_stat = os.lstat(file_path)
@@ -30,10 +33,15 @@ async def process_upload_items(
     items: list[tuple[str, bytes]],
     *,
     notebook_id: str | None = None,
+    convert: bool = True,
 ) -> list[dict[str, str]]:
     """Write files to *uploads_dir* with the same behaviour as the thread uploads API.
 
     Each item is ``(raw_filename, content)``. Filenames are normalized here.
+
+    When *convert* is False (notebook library fast path), PDF/Office files are written
+    and synced to the sandbox but markdown conversion is skipped — call
+    :func:`run_upload_markdown_conversion` in a background task for each file.
 
     Returns the same per-file dict shape as Gateway ``UploadResponse.files``.
     """
@@ -73,7 +81,7 @@ async def process_upload_items(
             file_info["notebook_id"] = notebook_id
 
         file_ext = file_path.suffix.lower()
-        if file_ext in CONVERTIBLE_EXTENSIONS:
+        if convert and file_ext in CONVERTIBLE_EXTENSIONS:
             md_path = await convert_file_to_markdown(file_path)
             if md_path:
                 md_virtual_path = upload_virtual_path(md_path.name)
@@ -88,3 +96,34 @@ async def process_upload_items(
         uploaded_files.append(file_info)
 
     return uploaded_files
+
+
+async def run_upload_markdown_conversion(file_path: Path, thread_id: str) -> None:
+    """Run markdown conversion for one uploaded file (notebook async path).
+
+    On success, writes ``mnd_<stem>.md`` and syncs to sandbox. On failure, writes
+    ``<stem>.conversion-error`` with the error text so :func:`list_documents` can
+    surface ``DocumentStatus.FAILED``.
+    """
+    uploads_dir = file_path.parent
+    stem = file_path.stem
+    error_path = uploads_dir / f"{stem}{CONVERSION_ERROR_MARKER}"
+    error_path.unlink(missing_ok=True)
+    if file_path.suffix.lower() not in CONVERTIBLE_EXTENSIONS:
+        return
+    try:
+        sandbox_provider = get_sandbox_provider()
+        sandbox_id = sandbox_provider.acquire(thread_id)
+        sandbox = sandbox_provider.get(sandbox_id)
+        md_path = await convert_file_to_markdown(file_path)
+        if md_path:
+            md_virtual_path = upload_virtual_path(md_path.name)
+            if sandbox_id != "local":
+                _make_file_sandbox_writable(md_path)
+                sandbox.update_file(md_virtual_path, md_path.read_bytes())
+    except Exception as e:
+        logger.exception("Upload markdown conversion failed for %s", file_path)
+        try:
+            error_path.write_text(str(e), encoding="utf-8")
+        except OSError:
+            logger.warning("Could not write conversion error marker %s", error_path)
