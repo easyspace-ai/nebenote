@@ -20,6 +20,7 @@ import {
   ArtifactHeader,
   ArtifactTitle,
 } from "@/components/ai-elements/artifact";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { Select, SelectItem } from "@/components/ui/select";
 import {
   SelectContent,

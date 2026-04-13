@@ -13,14 +13,24 @@ export async function loadArtifactContent({
   threadId: string;
   isMock?: boolean;
 }) {
-  let enhancedFilepath = filepath;
-  if (filepath.endsWith(".skill")) {
-    enhancedFilepath = filepath + "/SKILL.md";
+  try {
+    let enhancedFilepath = filepath;
+    if (filepath.endsWith(".skill")) {
+      enhancedFilepath = filepath + "/SKILL.md";
+    }
+    const url = urlOfArtifact({ filepath: enhancedFilepath, threadId, isMock });
+    const response = await fetchArtifactWithAuth(url);
+    
+    if (!response.ok) {
+      throw new Error(`Failed to load artifact: ${response.status} ${response.statusText}`);
+    }
+    
+    const text = await response.text();
+    return { content: text, url };
+  } catch (error) {
+    console.error("Error loading artifact content:", error);
+    throw error;
   }
-  const url = urlOfArtifact({ filepath: enhancedFilepath, threadId, isMock });
-  const response = await fetchArtifactWithAuth(url);
-  const text = await response.text();
-  return { content: text, url };
 }
 
 export function loadArtifactContentFromToolCall({

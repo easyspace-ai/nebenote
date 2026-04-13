@@ -22,13 +22,13 @@ import { ThreadTitle } from "@/components/workspace/thread-title";
 import { TodoList } from "@/components/workspace/todo-list";
 import { TokenUsageIndicator } from "@/components/workspace/token-usage-indicator";
 import { Welcome } from "@/components/workspace/welcome";
+import { getAPIClient } from "@/core/api";
 import { useI18n } from "@/core/i18n/hooks";
 import { setLastNotebookThread } from "@/core/notebook/session";
 import { useNotification } from "@/core/notification/hooks";
 import { useThreadSettings } from "@/core/settings";
 import { useThreadStream } from "@/core/threads/hooks";
 import { textOfMessage } from "@/core/threads/utils";
-import { getAPIClient } from "@/core/api";
 import { env } from "@/env";
 import { cn } from "@/lib/utils";
 
@@ -170,7 +170,7 @@ export default function NotebookChatPage() {
                 paddingBottom={messageListPaddingBottom}
               />
             </div>
-            <div className="absolute right-0 bottom-0 left-0 z-30 flex justify-center px-4 pb-2">
+            <div className="absolute right-0 bottom-0 left-0 z-30 flex justify-center px-4 pb-4">
               <div
                 className={cn(
                   "relative w-full",
@@ -194,7 +194,7 @@ export default function NotebookChatPage() {
                 {mounted ? (
                   <InputBox
                     className={cn(
-                      "bg-background/60 backdrop-blur-md border border-border/40 w-full -translate-y-4 shadow-sm",
+                      "bg-background/60 backdrop-blur-md border border-border/40 w-full shadow-sm",
                       !isNewThread && "mt-2"
                     )}
                     isNewThread={isNewThread}
@@ -227,7 +227,7 @@ export default function NotebookChatPage() {
                   <div
                     aria-hidden="true"
                     className={cn(
-                      "bg-background/5 h-32 w-full -translate-y-4 rounded-2xl border",
+                      "bg-background/5 h-32 w-full rounded-2xl border",
                     )}
                   />
                 )}

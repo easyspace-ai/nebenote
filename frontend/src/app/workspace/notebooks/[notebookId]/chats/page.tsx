@@ -33,7 +33,7 @@ export default function NotebookNewChatPage() {
       clearLastNotebookThread(notebookId);
       lastThreadId = null;
     }
-    const targetThreadId = lastThreadId ? lastThreadId : threadIds[0];
+    const targetThreadId = lastThreadId ?? threadIds[0];
     router.replace(`/workspace/notebooks/${notebookId}/chats/${targetThreadId}`);
   }, [createThread.isPending, isLoading, notebook, notebookId, router]);
 

@@ -295,6 +295,11 @@ export function useThreadStream({
     onFinish(state) {
       listeners.current.onFinish?.(state.values);
       void queryClient.invalidateQueries({ queryKey: ["threads", "search"] });
+      if (notebookIdFromPage) {
+        void queryClient.invalidateQueries({
+          queryKey: ["notebook-artifacts", notebookIdFromPage],
+        });
+      }
     },
   });
 

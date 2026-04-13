@@ -21,11 +21,39 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ArtifactFileDetail } from "@/components/workspace/artifacts";
 import { getAPIClient } from "@/core/api";
+import { extractPresentFilesFromMessage } from "@/core/messages/utils";
 import { useNotebook } from "@/core/notebook/hooks";
 import type { AgentThreadState } from "@/core/threads/types";
 import { getFileExtensionDisplayName, getFileIcon, getFileName } from "@/core/utils/files";
 
 import { useNotebookLayout } from "./notebook-layout";
+
+/** Paths from graph state plus any `present_files` tool calls in messages (mirrors chat UI). */
+function collectArtifactPathsFromThreadValues(
+  values: AgentThreadState | Record<string, unknown> | null | undefined,
+): string[] {
+  if (!values || typeof values !== "object") return [];
+  const v = values as AgentThreadState;
+  const ordered: string[] = [];
+  const seen = new Set<string>();
+  const push = (p: string) => {
+    const t = p.trim();
+    if (!t || seen.has(t)) return;
+    seen.add(t);
+    ordered.push(t);
+  };
+  for (const a of v.artifacts ?? []) {
+    if (typeof a === "string") push(a);
+  }
+  for (const msg of v.messages ?? []) {
+    if (msg.type === "ai") {
+      for (const p of extractPresentFilesFromMessage(msg)) {
+        push(p);
+      }
+    }
+  }
+  return ordered;
+}
 
 // 生成功能配置 - 可在这里编辑添加新的生成类型
 export interface GenerationConfig {
@@ -39,11 +67,18 @@ export interface GenerationConfig {
 
 export const generationConfigs: GenerationConfig[] = [
   // Core built-in generators
-  {
-    id: "summary",
-    title: "总结",
-    description: "生成当前对话的要点总结",
-    prompt: "请基于上述内容，生成一份清晰简洁的要点总结，提炼核心观点和关键信息。",
+  // {
+  //   id: "summary",
+  //   title: "总结",
+  //   description: "生成当前对话的要点总结",
+  //   prompt: "请基于上述内容，生成一份清晰简洁的要点总结，提炼核心观点和关键信息。",
+  //   icon: FileText,
+  // },
+   {
+    id: "lecture-generator",
+    title: "交互式讲义",
+    description: "生成双人对话播客脚本",
+    prompt: "请使用 lecture-generator 技能，生成符合高校教学规范的交互式HTML。",
     icon: FileText,
   },
   {
@@ -60,6 +95,7 @@ export const generationConfigs: GenerationConfig[] = [
   //   prompt: "请基于上述内容，生成一个结构化的内容大纲，帮助理解整体框架。",
   //   icon: FileJson,
   // },
+  
 
   // Public skills integration
   {
@@ -174,6 +210,8 @@ export function RightPanel({ notebookId }: RightPanelProps) {
   const { data: notebookArtifacts = [], isLoading: isNotebookArtifactsLoading } = useQuery({
     queryKey: ["notebook-artifacts", notebookId, notebookThreadIds],
     enabled: notebookThreadIds.length > 0,
+    staleTime: 15_000,
+    refetchOnWindowFocus: true,
     queryFn: async (): Promise<NotebookArtifactItem[]> => {
       const apiClient = getAPIClient();
       const settled = await Promise.all(
@@ -182,7 +220,7 @@ export function RightPanel({ notebookId }: RightPanelProps) {
             const state = await apiClient.threads.getState<AgentThreadState>(threadId);
             return {
               threadId,
-              artifacts: state.values?.artifacts ?? [],
+              artifacts: collectArtifactPathsFromThreadValues(state.values),
             };
           } catch {
             return {

@@ -4,8 +4,8 @@ import { useParams } from "next/navigation";
 import { useEffect, useLayoutEffect } from "react";
 
 import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
-import { ArtifactsProvider } from "@/components/workspace/artifacts";
 import { useSidebar } from "@/components/ui/sidebar";
+import { ArtifactsProvider } from "@/components/workspace/artifacts";
 import { LeftPanel } from "@/components/workspace/notebooks/left-panel";
 import { NotebookLayout } from "@/components/workspace/notebooks/notebook-layout";
 import { RightPanel } from "@/components/workspace/notebooks/right-panel";

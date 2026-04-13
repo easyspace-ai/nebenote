@@ -17,7 +17,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      router.replace(from || "/");
+      router.replace(from ?? "/");
     }
   }, [authLoading, isAuthenticated, router, from]);
 
@@ -26,7 +26,7 @@ export default function LoginPage() {
     setIsLoading(true);
     try {
       await login(email, password);
-      router.push(from || "/");
+      router.push(from ?? "/");
     } catch (err) {
       const message = err instanceof Error ? err.message : "登录失败";
       setError(message);

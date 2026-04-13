@@ -38,6 +38,8 @@ import {
 } from "@/core/notebook/hooks";
 import { setLastNotebookThread } from "@/core/notebook/session";
 import type { Document, DocumentStatus } from "@/core/notebook/types";
+import { useThreads as useWorkspaceThreads } from "@/core/threads/hooks";
+import { titleOfThread } from "@/core/threads/utils";
 import { cn } from "@/lib/utils";
 
 import { useNotebookLayout } from "./notebook-layout";
@@ -441,10 +443,26 @@ function ThreadList({ notebookId }: { notebookId: string }) {
   const threadIdFromRoute = params.threadId;
 
   const { data: notebook, isLoading } = useNotebook(notebookId);
+  const { data: workspaceThreads = [] } = useWorkspaceThreads();
 
   // thread_ids from backend: [...oldest, newest]
   // Reverse to show newest at TOP
   const threadIds = [...(notebook?.thread_ids ?? [])].reverse();
+
+  const displayTitleByThreadId = useMemo(() => {
+    const threadMap = new Map(
+      workspaceThreads.map((thread) => [thread.thread_id, thread] as const),
+    );
+    const labels = new Map<string, string>();
+    for (const tid of threadIds) {
+      const thread = threadMap.get(tid);
+      labels.set(
+        tid,
+        thread ? titleOfThread(thread) : `对话 · ${tid.slice(0, 8)}`,
+      );
+    }
+    return labels;
+  }, [threadIds, workspaceThreads]);
 
   const goToThread = (threadId: string) => {
     setLastNotebookThread(notebookId, threadId);
@@ -481,7 +499,9 @@ function ThreadList({ notebookId }: { notebookId: string }) {
                 className="flex min-w-0 flex-1 items-center gap-2 text-left"
               >
                 <MessageSquare className="h-4 w-4 shrink-0 opacity-80" />
-                <span className="min-w-0 flex-1 truncate">对话 · {tid.slice(0, 8)}</span>
+                <span className="min-w-0 flex-1 truncate">
+                  {displayTitleByThreadId.get(tid) ?? `对话 · ${tid.slice(0, 8)}`}
+                </span>
               </button>
               {active && (
                 <DropdownMenu>

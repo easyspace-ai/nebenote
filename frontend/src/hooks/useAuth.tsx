@@ -25,7 +25,7 @@ interface AuthState {
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -77,7 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    fetchUser();
+    void fetchUser();
   }, [token]);
 
   const login = useCallback(async (email: string, password: string) => {
@@ -120,7 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       syncAuthCookie(false);
       setToken(null);
       setUser(null);
-      router.push("/login");
+      void router.push("/login");
     }
   }, [router]);
 

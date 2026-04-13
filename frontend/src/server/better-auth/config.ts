@@ -1,9 +1,13 @@
-import { betterAuth } from "better-auth";
 import path from "path";
+
+import { betterAuth } from "better-auth";
 
 // better-auth v1.x defaults to SQLite database
 // We just need to change the path to a writable persistent location
-const config: any = {
+const config: {
+  emailAndPassword: { enabled: boolean };
+  database?: { path: string };
+} = {
   emailAndPassword: {
     enabled: true,
   },

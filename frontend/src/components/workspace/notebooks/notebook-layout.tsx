@@ -164,7 +164,7 @@ export function NotebookLayout({
 
   return (
     <NotebookLayoutContext.Provider value={contextValue}>
-      <div className="flex h-full w-full flex-col overflow-hidden bg-background p-3 gap-3">
+      <div className="flex h-full min-h-0 w-full flex-col overflow-x-hidden bg-background p-3 gap-3">
         {topBar && <div className="shrink-0">{topBar}</div>}
         <ResizablePanelGroup
           orientation="horizontal"
@@ -206,7 +206,7 @@ export function NotebookLayout({
             defaultSize={`${centerPercentage}%`}
             minSize={`${CENTER_MIN}%`}
           >
-            <div className="flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-background">
+            <div className="flex h-full min-w-0 flex-col overflow-x-hidden rounded-xl border border-border bg-background">
               {children}
             </div>
           </ResizablePanel>

@@ -20,6 +20,7 @@ import {
 } from "@/core/utils/files";
 import { cn } from "@/lib/utils";
 
+import { ArtifactError } from "./artifact-error";
 import { useArtifacts } from "./context";
 
 export function ArtifactFileList({
@@ -34,11 +35,20 @@ export function ArtifactFileList({
   const { t } = useI18n();
   const { select: selectArtifact, setOpen } = useArtifacts();
   const [installingFile, setInstallingFile] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const handleClick = useCallback(
-    (filepath: string) => {
-      selectArtifact(filepath);
-      setOpen(true);
+    async (filepath: string) => {
+      try {
+        setError(null);
+        selectArtifact(filepath);
+        setOpen(true);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "未知错误";
+        console.error("Failed to select artifact:", error);
+        setError(errorMessage);
+        toast.error(`无法打开产物: ${errorMessage}`);
+      }
     },
     [selectArtifact, setOpen],
   );
@@ -70,6 +80,17 @@ export function ArtifactFileList({
     },
     [threadId, installingFile],
   );
+
+  if (error) {
+    return (
+      <ArtifactError
+        error={new Error(error)}
+        onRetry={() => {
+          setError(null);
+        }}
+      />
+    );
+  }
 
   return (
     <ul className={cn("flex w-full flex-col gap-4", className)}>
