@@ -39,7 +39,7 @@ export function AuthForm({ mode, onSubmit, error, isLoading }: AuthFormProps) {
           <div className="mb-10 flex h-16 w-16 items-center justify-center rounded-lg bg-white/90 shadow-lg">
             <Sparkles className="h-8 w-8 fill-black text-black" />
           </div>
-          <h3 className="mb-4 text-3xl font-heading font-bold text-white">DeerFlow</h3>
+          <h3 className="mb-4 text-3xl font-heading font-bold text-white">MetaNote</h3>
           <p className="text-lg font-medium leading-relaxed text-white/80">
             面向研究、合成与创作的本地智能工作区。
           </p>

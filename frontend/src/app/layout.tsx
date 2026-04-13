@@ -10,7 +10,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 
 // Google Fonts for DeerFlow Design System: Poppins (headings) + Open Sans (body)
 export const metadata: Metadata = {
-  title: "DeerFlow",
+  title: "MetaNote",
   description: "AI-powered research notebook for deep thinking and knowledge synthesis" ,
 };
 

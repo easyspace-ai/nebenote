@@ -223,66 +223,46 @@ export function NotebookSidebarContent() {
           value="uploads"
           className="mt-0 flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden"
         >
-          <div className="space-y-2 py-4">
-            <input
-              id="notebook-sidebar-upload-input"
-              type="file"
-              multiple
-              className="hidden"
-              accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.md"
-              onChange={(event) => handleFileSelect(event.target.files)}
-            />
+          {/* 搜索和添加按钮栏 */}
+          <div className="flex items-center gap-2 py-4">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-sidebar-foreground/50" />
+              <Input
+                type="search"
+                placeholder="搜索"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-9 w-full rounded-xl border-sidebar-border/70 bg-sidebar pl-9 pr-3 text-sm placeholder:text-sidebar-foreground/50 focus:border-sidebar-accent focus:ring-sidebar-accent/20"
+              />
+            </div>
             <Button
               type="button"
-              variant="secondary"
-              className="h-10 w-full justify-center rounded-xl border border-sidebar-border/70 bg-sidebar text-sm text-sidebar-foreground hover:bg-sidebar-accent/10"
-              onClick={() =>
-                document.getElementById("notebook-sidebar-upload-input")?.click()
-              }
+              variant="ghost"
+              size="sm"
+              className="h-9 w-9 shrink-0 rounded-xl p-0 text-sidebar-foreground/70 hover:bg-sidebar-accent/10 hover:text-sidebar-foreground"
+              onClick={() => setUploadDialogOpen(true)}
             >
-              <Upload className="mr-2 size-4" />
-              选择文件
+              <Plus className="size-4" />
             </Button>
-
-            {uploadFiles.length > 0 && (
-              <div className="rounded-xl border border-sidebar-border/70 bg-sidebar px-3 py-3">
-                <ul className="space-y-1 text-xs leading-5 text-sidebar-foreground/65">
-                  {uploadFiles.map((file) => (
-                    <li key={`${file.name}-${file.lastModified}`} className="truncate">
-                      {file.name}
-                    </li>
-                  ))}
-                </ul>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="mt-3 h-8 w-full rounded-lg bg-sidebar-accent text-sidebar-accent-foreground hover:bg-sidebar-accent/90"
-                  onClick={() => void handleUpload()}
-                  disabled={uploadDocument.isPending}
-                >
-                  {uploadDocument.isPending ? "上传中…" : "上传"}
-                </Button>
-              </div>
-            )}
           </div>
 
           <ScrollArea className="min-h-0 flex-1">
-            <div className="space-y-2 pr-1">
+            <div className="space-y-1 pr-1">
               {docsLoading && (
                 <p className="px-2 py-4 text-xs text-sidebar-foreground/55">
                   正在加载资料…
                 </p>
               )}
 
-              {!docsLoading && (!documents || documents.length === 0) && (
+              {!docsLoading && (!filteredDocuments || filteredDocuments.length === 0) && (
                 <div className="rounded-xl border border-dashed border-sidebar-border/70 px-3 py-8 text-center text-xs leading-6 text-sidebar-foreground/55">
-                  还没有上传资料。
+                  {searchQuery ? "没有找到匹配的资料" : "还没有上传资料。"}
                   <br />
-                  支持 PDF、Office、文本与 Markdown 文件。
+                  {!searchQuery && "点击右上角 + 上传资料"}
                 </div>
               )}
 
-              {documents?.map((doc) => (
+              {filteredDocuments?.map((doc) => (
                 <NotebookDocumentRow
                   key={doc.doc_id}
                   doc={doc}
@@ -294,6 +274,88 @@ export function NotebookSidebarContent() {
           </ScrollArea>
         </TabsContent>
       </Tabs>
+
+      {/* 添加资料弹窗 */}
+      <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>添加资料</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {/* 拖拽上传区域 */}
+            <div
+              className={cn(
+                "rounded-2xl border-2 border-dashed border-sidebar-border/70 p-8 text-center transition-colors",
+                "hover:border-sidebar-accent hover:bg-sidebar-accent/5"
+              )}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+            >
+              <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-sidebar-accent/10">
+                <Upload className="size-8 text-sidebar-accent" />
+              </div>
+              <p className="text-base font-medium text-sidebar-foreground">
+                拖拽文件到这里，或点击上传文件
+              </p>
+              <p className="mt-2 text-sm text-sidebar-foreground/60">
+                支持 PDF、文档、图片、音频、视频等
+              </p>
+              <input
+                id="upload-dialog-input"
+                type="file"
+                multiple
+                className="hidden"
+                accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.md,.jpg,.jpeg,.png,.gif,.webp,.mp3,.mp4,.mov,.avi"
+                onChange={(event) => handleFileSelect(event.target.files)}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                className="mt-6"
+                onClick={() =>
+                  document.getElementById("upload-dialog-input")?.click()
+                }
+              >
+                选择文件
+              </Button>
+            </div>
+
+            {/* 待上传文件列表 */}
+            {uploadFiles.length > 0 && (
+              <div className="max-h-[200px] space-y-2 overflow-y-auto rounded-xl border border-sidebar-border/70 bg-sidebar p-3">
+                {uploadFiles.map((file, index) => (
+                  <div
+                    key={`${file.name}-${file.lastModified}-${index}`}
+                    className="flex items-center gap-2 rounded-lg bg-sidebar-background/50 px-3 py-2"
+                  >
+                    <FileText className="size-4 shrink-0 text-sidebar-foreground/60" />
+                    <span className="min-w-0 flex-1 truncate text-sm text-sidebar-foreground">
+                      {file.name}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      className="shrink-0"
+                      onClick={() => handleRemoveFile(index)}
+                    >
+                      <X className="size-4 text-sidebar-foreground/50" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  className="mt-2 h-9 w-full"
+                  onClick={handleUpload}
+                  disabled={uploadDocument.isPending}
+                >
+                  {uploadDocument.isPending ? "上传中…" : "开始上传"}
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -307,37 +369,40 @@ function NotebookDocumentRow({
   dateLocale: typeof zhCN;
   onDelete: () => void;
 }) {
+  // 根据文件类型选择图标（简单判断）
+  const getFileIcon = () => {
+    const ext = doc.title.split('.').pop()?.toLowerCase();
+    // 可以在这里扩展更多图标，目前统一用FileText
+    return <FileText className="size-4" />;
+  };
+
   return (
-    <div className="rounded-xl border border-sidebar-border/70 bg-sidebar px-3 py-3">
-      <div className="flex items-start gap-3">
-        <div className="bg-sidebar-accent/10 text-sidebar-accent mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg">
-          <FileText className="size-4" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="line-clamp-2 text-sm font-medium leading-5 text-sidebar-foreground">
-            {doc.title}
-          </p>
-          <p className="mt-1 text-[11px] text-sidebar-foreground/55">
-            {formatDistanceToNow(new Date(doc.created_at * 1000), {
-              addSuffix: true,
-              locale: dateLocale,
-            })}{" "}
-            · {doc.status}
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="shrink-0 text-sidebar-foreground/55 hover:bg-destructive/10 hover:text-destructive"
-          title="删除资料"
-          onClick={() => {
-            if (confirm("确定删除这份资料？")) onDelete();
-          }}
-        >
-          <Trash2 className="size-3.5" />
-        </Button>
+    <button
+      type="button"
+      className={cn(
+        "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors",
+        "text-sidebar-foreground/70 hover:bg-sidebar-accent/10 hover:text-sidebar-foreground"
+      )}
+    >
+      <div className="bg-sidebar-accent/10 text-sidebar-accent flex size-8 shrink-0 items-center justify-center rounded-lg">
+        {getFileIcon()}
       </div>
-    </div>
+      <span className="min-w-0 flex-1 truncate text-sm font-medium text-sidebar-foreground">
+        {doc.title}
+      </span>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        className="shrink-0 text-sidebar-foreground/55 hover:bg-destructive/10 hover:text-destructive"
+        title="删除资料"
+        onClick={(e) => {
+          e.stopPropagation();
+          if (confirm("确定删除这份资料？")) onDelete();
+        }}
+      >
+        <Trash2 className="size-3.5" />
+      </Button>
+    </button>
   );
 }

@@ -262,7 +262,7 @@ start() {
 # View Docker development logs
 logs() {
     local service=""
-    
+
     case "$1" in
         --frontend)
             service="frontend"
@@ -289,7 +289,18 @@ logs() {
             exit 1
             ;;
     esac
-    
+
+    # Set defaults for variables referenced in docker-compose-dev.yaml to suppress warnings
+    if [ -z "$DEER_FLOW_ROOT" ]; then
+        export DEER_FLOW_ROOT="$PROJECT_ROOT"
+    fi
+    if [ -z "$LANGGRAPH_ALLOW_BLOCKING" ]; then
+        export LANGGRAPH_ALLOW_BLOCKING="0"
+    fi
+    if [ -z "$DEER_FLOW_DOCKER_SOCKET" ]; then
+        export DEER_FLOW_DOCKER_SOCKET="/var/run/docker.sock"
+    fi
+
     cd "$DOCKER_DIR" && $COMPOSE_CMD logs -f $service
 }
 
