@@ -24,11 +24,11 @@ const STORAGE_KEY = "notebook-layout-state";
 const DEFAULT_STATE: PanelState = {
   leftOpen: true,
   rightOpen: true,
-  leftSize: 22,
+  leftSize: 18,
   rightSize: 24,
 };
-const LEFT_MIN = 16;
-const LEFT_MAX = 40;
+const LEFT_MIN = 14;
+const LEFT_MAX = 30;
 const RIGHT_MIN = 18;
 const RIGHT_MAX = 40;
 const CENTER_MIN = 28;

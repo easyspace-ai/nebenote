@@ -40,6 +40,37 @@ def test_delete_document_removes_file(tmp_path):
     assert not (udir / "x.txt").exists()
 
 
+def test_delete_document_removes_mnd_sidecar(tmp_path):
+    paths = NotebookPaths(base_dir=tmp_path)
+    mgr = NotebookManager(paths=paths)
+    nb = mgr.create_notebook("Test NB")
+    udir = paths.uploads_dir(nb.notebook_id)
+    (udir / "x.pdf").write_text("pdf")
+    (udir / "mnd_x.md").write_text("converted")
+
+    mgr.delete_document(nb.notebook_id, "x.pdf")
+
+    assert not (udir / "x.pdf").exists()
+    assert not (udir / "mnd_x.md").exists()
+
+
+def test_rename_document_renames_file_and_mnd_sidecar(tmp_path):
+    paths = NotebookPaths(base_dir=tmp_path)
+    mgr = NotebookManager(paths=paths)
+    nb = mgr.create_notebook("Test NB")
+    udir = paths.uploads_dir(nb.notebook_id)
+    (udir / "old.pdf").write_text("pdf")
+    (udir / "mnd_old.md").write_text("converted")
+
+    doc = mgr.rename_document(nb.notebook_id, "old.pdf", "new-title")
+
+    assert doc.doc_id == "new-title.pdf"
+    assert (udir / "new-title.pdf").exists()
+    assert not (udir / "old.pdf").exists()
+    assert (udir / "mnd_new-title.md").exists()
+    assert not (udir / "mnd_old.md").exists()
+
+
 def test_process_upload_items_writes_to_notebook_uploads(tmp_path, monkeypatch):
     from deerflow.uploads.pipeline import process_upload_items
 

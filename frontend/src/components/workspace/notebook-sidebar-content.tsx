@@ -11,11 +11,18 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { useParams, usePathname, useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import React from "react";
 import { useCallback, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -34,7 +41,6 @@ import { cn } from "@/lib/utils";
 
 export function NotebookSidebarContent() {
   const router = useRouter();
-  const pathname = usePathname();
   const params = useParams<{ notebookId: string; threadId?: string }>();
   const notebookId = params.notebookId;
   const threadIdFromRoute = params.threadId;
@@ -120,6 +126,22 @@ export function NotebookSidebarContent() {
     }
   }, [createThread, notebookId, router]);
 
+  // Auto-create first thread when notebook is empty
+  const hasNoThreads = notebook?.thread_ids?.length === 0;
+  const isEmptyNotebook = !notebookLoading && hasNoThreads;
+
+  // Use a ref to track whether we've already attempted auto-creation
+  // This prevents double-creation in React strict mode (development)
+  const autoCreatedRef = React.useRef(false);
+  
+  // Auto-redirect to create a new thread if notebook is empty
+  React.useEffect(() => {
+    if (isEmptyNotebook && !threadIdFromRoute && !createThread.isPending && !autoCreatedRef.current) {
+      autoCreatedRef.current = true;
+      void handleCreateThread();
+    }
+  }, [isEmptyNotebook, threadIdFromRoute, createThread.isPending, handleCreateThread]);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="border-sidebar-border/70 px-4 py-3">
@@ -148,40 +170,47 @@ export function NotebookSidebarContent() {
           value="threads"
           className="mt-0 flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden"
         >
-          <div className="flex items-center justify-between py-4">
-            <span className="text-sm font-semibold text-sidebar-foreground">
+          <div className="flex items-center justify-between pt-4">
+            <span className="text-xl font-semibold text-sidebar-foreground">
               对话
             </span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 rounded-lg px-2 text-xs text-sidebar-foreground/70 hover:bg-sidebar-accent/10 hover:text-sidebar-foreground"
-              onClick={() => void handleCreateThread()}
-              disabled={createThread.isPending}
-            >
-              <Plus className="size-4" />
-            </Button>
-          </div>
-
-          <ScrollArea className="min-h-0 flex-1">
-            <div className="space-y-1 pr-1">
-              <button
+            <div className="flex items-center gap-2">
+              <Button
                 type="button"
-                onClick={() => router.push(`/workspace/notebooks/${notebookId}/chats`)}
-                className={cn(
-                  "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors",
-                  pathname === `/workspace/notebooks/${notebookId}/chats`
-                    ? "bg-muted text-foreground"
-                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/10 hover:text-sidebar-foreground",
-                )}
+                variant="ghost"
+                size="sm"
+                className="h-10 w-10 rounded-xl p-0 text-sidebar-foreground/70 hover:bg-sidebar-accent/10 hover:text-sidebar-foreground"
+                onClick={() => setSearchVisible(!searchVisible)}
               >
-                <MessageSquare className="size-4 shrink-0" />
-                <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                  新对话
-                </span>
-              </button>
+                <Search className="size-5" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-10 w-10 rounded-xl p-0 text-sidebar-foreground/70 hover:bg-sidebar-accent/10 hover:text-sidebar-foreground"
+                onClick={() => void handleCreateThread()}
+                disabled={createThread.isPending}
+              >
+                <Plus className="size-5" />
+              </Button>
+            </div>
+          </div>
+          {searchVisible && (
+            <div className="relative pt-3">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-sidebar-foreground/50" />
+              <Input
+                type="search"
+                placeholder="搜索对话..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-11 w-full rounded-xl border-sidebar-border/70 bg-sidebar pl-9 pr-3 text-base placeholder:text-sidebar-foreground/50 focus:border-sidebar-accent focus:ring-sidebar-accent/20"
+              />
+            </div>
+          )}
 
+          <ScrollArea className="min-h-0 flex-1 pt-3">
+            <div className="space-y-3 pr-2 pb-4">
               {notebookThreads.map((thread) => {
                 const active = threadIdFromRoute === thread.threadId;
 
@@ -195,14 +224,14 @@ export function NotebookSidebarContent() {
                       )
                     }
                     className={cn(
-                      "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors",
+                      "flex w-full items-center gap-3 rounded-2xl border border-sidebar-border/70 bg-sidebar px-4 py-3 text-left transition-colors",
                       active
                         ? "bg-muted text-foreground"
                         : "text-sidebar-foreground/70 hover:bg-sidebar-accent/10 hover:text-sidebar-foreground",
                     )}
                   >
-                    <MessageSquare className="size-4 shrink-0" />
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                    <MessageSquare className="size-5 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate text-base font-medium text-sidebar-foreground">
                       {thread.title}
                     </span>
                   </button>
@@ -210,10 +239,10 @@ export function NotebookSidebarContent() {
               })}
 
               {!notebookLoading && notebookThreads.length === 0 && (
-                <div className="rounded-xl border border-dashed border-sidebar-border/70 px-3 py-8 text-center text-xs leading-6 text-sidebar-foreground/55">
-                  还没有会话。
+                <div className="rounded-2xl border border-dashed border-sidebar-border/70 px-3 py-8 text-center text-sm leading-6 text-sidebar-foreground/55">
+                  还没有对话。
                   <br />
-                  点击上方“新对话”开始。
+                  点击上方 + 按钮开始新对话。
                 </div>
               )}
             </div>
@@ -224,60 +253,84 @@ export function NotebookSidebarContent() {
           value="uploads"
           className="mt-0 flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden"
         >
-          {/* 搜索和添加按钮 - 参考设计图：两个图标在右上角 */}
-          <div className="flex flex-col gap-2 py-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-sidebar-foreground">
-                资料
-              </span>
-              <div className="flex items-center gap-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 rounded-lg p-0 text-sidebar-foreground/70 hover:bg-sidebar-accent/10 hover:text-sidebar-foreground"
-                  onClick={() => setSearchVisible(!searchVisible)}
-                >
-                  <Search className="size-4" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 rounded-lg p-0 text-sidebar-foreground/70 hover:bg-sidebar-accent/10 hover:text-sidebar-foreground"
-                  onClick={() => setUploadDialogOpen(true)}
-                >
-                  <Plus className="size-4" />
-                </Button>
-              </div>
-            </div>
-            {searchVisible && (
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-sidebar-foreground/50" />
-                <Input
-                  type="search"
-                  placeholder="搜索资料..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-9 w-full rounded-xl border-sidebar-border/70 bg-sidebar pl-9 pr-3 text-sm placeholder:text-sidebar-foreground/50 focus:border-sidebar-accent focus:ring-sidebar-accent/20"
-                />
-              </div>
-            )}
+          {/* 选择文件按钮 - 和参考截图一致：放在列表顶部 */}
+          <div className="pt-4">
+            <Button
+              type="button"
+              variant="secondary"
+              className="h-16 w-full justify-center rounded-2xl border border-sidebar-border/70 bg-sidebar text-lg font-medium text-sidebar-foreground hover:bg-sidebar-accent/10"
+              onClick={() => document.getElementById("upload-inline-input")?.click()}
+            >
+              <Upload className="mr-3 size-6" />
+              ↑ 选择文件
+            </Button>
           </div>
 
-          <ScrollArea className="min-h-0 flex-1">
-            <div className="space-y-1 pr-1">
+          <input
+            id="upload-inline-input"
+            type="file"
+            multiple
+            className="hidden"
+            accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.md,.jpg,.jpeg,.png,.gif,.webp,.mp3,.mp4,.mov,.avi"
+            onChange={(event) => handleFileSelect(event.target.files)}
+          />
+
+          {/* 已选择待上传文件列表 - 像参考图那样展示 */}
+          {uploadFiles.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {uploadFiles.map((file, index) => (
+                <div
+                  key={`${file.name}-${file.lastModified}-${index}`}
+                  className="flex items-center gap-3 rounded-2xl border border-sidebar-border/70 bg-sidebar px-4 py-3"
+                >
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-green-500/10 text-green-500">
+                    <FileText className="size-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-base font-semibold text-sidebar-foreground">
+                      {file.name}
+                    </p>
+                    <p className="mt-1 text-sm text-sidebar-foreground/55">
+                      ready
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="shrink-0"
+                    onClick={() => handleRemoveFile(index)}
+                  >
+                    <X className="size-4 text-sidebar-foreground/50" />
+                  </Button>
+                </div>
+              ))}
+              {uploadFiles.length > 0 && (
+                <Button
+                  type="button"
+                  className="mt-2 h-12 w-full rounded-xl"
+                  onClick={handleUpload}
+                  disabled={uploadDocument.isPending}
+                >
+                  {uploadDocument.isPending ? "上传中…" : "开始上传"}
+                </Button>
+              )}
+            </div>
+          )}
+
+          <ScrollArea className="min-h-0 flex-1 pt-3">
+            <div className="space-y-3 pr-2 pb-4">
               {docsLoading && (
-                <p className="px-2 py-4 text-xs text-sidebar-foreground/55">
+                <p className="px-2 py-4 text-sm text-sidebar-foreground/55">
                   正在加载资料…
                 </p>
               )}
 
               {!docsLoading && (!filteredDocuments || filteredDocuments.length === 0) && (
-                <div className="rounded-xl border border-dashed border-sidebar-border/70 px-3 py-8 text-center text-xs leading-6 text-sidebar-foreground/55">
+                <div className="rounded-2xl border border-dashed border-sidebar-border/70 px-3 py-8 text-center text-sm leading-6 text-sidebar-foreground/55">
                   {searchQuery ? "没有找到匹配的资料" : "还没有上传资料。"}
                   <br />
-                  {!searchQuery && "点击右上角 + 上传资料"}
+                  {!searchQuery && "点击上方选择文件上传资料"}
                 </div>
               )}
 
@@ -294,7 +347,7 @@ export function NotebookSidebarContent() {
         </TabsContent>
       </Tabs>
 
-      {/* 添加资料弹窗 */}
+      {/* 添加资料弹窗保留用于拖拽上传 */}
       <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
@@ -338,42 +391,6 @@ export function NotebookSidebarContent() {
                 选择文件
               </Button>
             </div>
-
-            {/* 待上传文件列表 */}
-            {uploadFiles.length > 0 && (
-              <div className="max-h-[200px] space-y-2 overflow-y-auto rounded-2xl border border-sidebar-border/70 bg-sidebar p-3">
-                {uploadFiles.map((file, index) => (
-                  <div
-                    key={`${file.name}-${file.lastModified}-${index}`}
-                    className="flex items-center gap-3 rounded-xl bg-sidebar-background/50 px-3 py-3"
-                  >
-                    <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-green-500/10 text-green-500">
-                      <FileText className="size-4" />
-                    </div>
-                    <span className="min-w-0 flex-1 truncate text-sm text-sidebar-foreground">
-                      {file.name}
-                    </span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      className="shrink-0"
-                      onClick={() => handleRemoveFile(index)}
-                    >
-                      <X className="size-4 text-sidebar-foreground/50" />
-                    </Button>
-                  </div>
-                ))}
-                <Button
-                  type="button"
-                  className="mt-3 h-10 w-full rounded-xl"
-                  onClick={handleUpload}
-                  disabled={uploadDocument.isPending}
-                >
-                  {uploadDocument.isPending ? "上传中…" : "开始上传"}
-                </Button>
-              </div>
-            )}
           </div>
         </DialogContent>
       </Dialog>
@@ -390,37 +407,62 @@ function NotebookDocumentRow({
   dateLocale: typeof zhCN;
   onDelete: () => void;
 }) {
-  // 提取文件扩展名，给不同类型显示不同图标
-  const getFileIcon = () => {
-    // 可以扩展更多类型，现在统一用FileText
-    return <FileText className="size-4 shrink-0" />;
-  };
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   return (
-    <button
-      type="button"
-      className={cn(
-        "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors",
-        "text-sidebar-foreground/70 hover:bg-sidebar-accent/10 hover:text-sidebar-foreground"
-      )}
-    >
-      {getFileIcon()}
-      <span className="min-w-0 flex-1 truncate text-sm font-medium text-sidebar-foreground">
-        {doc.title}
-      </span>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        className="shrink-0 text-sidebar-foreground/55 hover:bg-destructive/10 hover:text-destructive"
-        title="删除资料"
-        onClick={(e) => {
-          e.stopPropagation();
-          if (confirm("确定删除这份资料？")) onDelete();
-        }}
-      >
-        <Trash2 className="size-3.5" />
-      </Button>
-    </button>
+    <>
+      <div className="flex items-center gap-3 rounded-2xl border border-sidebar-border/70 bg-sidebar px-4 py-3">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-green-500/10 text-green-500">
+          <FileText className="size-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-base font-semibold text-sidebar-foreground">
+            {doc.title}
+          </p>
+          <p className="mt-1 text-sm text-sidebar-foreground/55">
+            {formatDistanceToNow(new Date(doc.created_at * 1000), {
+              addSuffix: true,
+              locale: dateLocale,
+            })} · {doc.status}
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="shrink-0 text-sidebar-foreground/55 hover:bg-destructive/10 hover:text-destructive"
+          title="删除资料"
+          onClick={(e) => {
+            e.stopPropagation();
+            setDeleteOpen(true);
+          }}
+        >
+          <Trash2 className="size-4" />
+        </Button>
+      </div>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>删除资料</DialogTitle>
+          </DialogHeader>
+          <p className="text-sidebar-foreground/70 text-sm">确定删除这份资料吗？</p>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleteOpen(false)}>
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                onDelete();
+                setDeleteOpen(false);
+              }}
+            >
+              删除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

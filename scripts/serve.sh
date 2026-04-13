@@ -90,7 +90,7 @@ stop_all() {
     # Force-kill any survivors still holding the service ports
     _kill_port 2024
     _kill_port 8001
-    _kill_port 3000
+    _kill_port ${PORT:-3000}
     ./scripts/cleanup-containers.sh deer-flow-sandbox 2>/dev/null || true
     echo "✓ All services stopped"
 }
@@ -130,9 +130,12 @@ if $DAEMON_MODE; then
     MODE_LABEL="$MODE_LABEL [daemon]"
 fi
 
+# Frontend configuration
+FRONTEND_PORT="${PORT:-3000}"
+
 # Frontend command
 if $DEV_MODE; then
-    FRONTEND_CMD="pnpm run dev"
+    FRONTEND_CMD="pnpm run dev --port $FRONTEND_PORT"
 else
     if command -v python3 >/dev/null 2>&1; then
         PYTHON_BIN="python3"
@@ -142,7 +145,7 @@ else
         echo "Python is required to generate BETTER_AUTH_SECRET."
         exit 1
     fi
-    FRONTEND_CMD="env BETTER_AUTH_SECRET=$($PYTHON_BIN -c 'import secrets; print(secrets.token_hex(16))') pnpm run preview"
+    FRONTEND_CMD="env BETTER_AUTH_SECRET=$($PYTHON_BIN -c 'import secrets; print(secrets.token_hex(16))') pnpm run preview --port $FRONTEND_PORT"
 fi
 
 # Extra flags for uvicorn/langgraph
@@ -225,7 +228,7 @@ if ! $GATEWAY_MODE; then
     echo "    LangGraph   → localhost:2024  (agent runtime)"
 fi
 echo "    Gateway     → localhost:8001  (REST API$(if $GATEWAY_MODE; then echo " + agent runtime"; fi))"
-echo "    Frontend    → localhost:3000  (Next.js)"
+echo "    Frontend    → localhost:$FRONTEND_PORT  (Next.js)"
 echo "    Nginx       → localhost:2026  (reverse proxy)"
 echo ""
 
@@ -293,11 +296,15 @@ run_service "Gateway" \
 # 3. Frontend
 run_service "Frontend" \
     "cd frontend && $FRONTEND_CMD > ../logs/frontend.log 2>&1" \
-    3000 120
+    $FRONTEND_PORT 120
 
-# 4. Nginx
+# 4. Nginx - generate config with correct frontend port
+NGINX_TEMPLATE="$REPO_ROOT/docker/nginx/nginx.local.conf"
+NGINX_GENERATED="$REPO_ROOT/docker/nginx/nginx.generated.conf"
+sed "s/server 127.0.0.1:3000;/server 127.0.0.1:$FRONTEND_PORT;/" "$NGINX_TEMPLATE" > "$NGINX_GENERATED"
+
 run_service "Nginx" \
-    "nginx -g 'daemon off;' -c '$REPO_ROOT/docker/nginx/nginx.local.conf' -p '$REPO_ROOT' > logs/nginx.log 2>&1" \
+    "nginx -g 'daemon off;' -c '$NGINX_GENERATED' -p '$REPO_ROOT' > logs/nginx.log 2>&1" \
     2026 10
 
 # ── Ready ────────────────────────────────────────────────────────────────────

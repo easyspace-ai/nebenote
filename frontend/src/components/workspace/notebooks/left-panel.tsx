@@ -1,39 +1,43 @@
 "use client";
 
-import { formatDistanceToNow } from "date-fns";
-import { zhCN, enUS } from "date-fns/locale";
 import {
   FileText,
   MessageSquare,
   Plus,
+  Search,
   Trash2,
   Upload,
-  X,
-  ChevronLeft,
   MoreHorizontal,
 } from "lucide-react";
 import { useParams, usePathname, useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useI18n } from "@/core/i18n/hooks";
 import {
   useCreateThread,
   useDeleteDocument,
   useDocuments,
   useNotebook,
+  useRenameDocument,
   useUploadDocument,
 } from "@/core/notebook/hooks";
 import { setLastNotebookThread } from "@/core/notebook/session";
-import type { Document } from "@/core/notebook/types";
+import type { Document, DocumentStatus } from "@/core/notebook/types";
 import { cn } from "@/lib/utils";
 
 import { useNotebookLayout } from "./notebook-layout";
@@ -43,15 +47,19 @@ interface LeftPanelProps {
 }
 
 export function LeftPanel({ notebookId }: LeftPanelProps) {
-  const { leftOpen, toggleLeft } = useNotebookLayout();
+  const { leftOpen } = useNotebookLayout();
   const router = useRouter();
 
-  const { data: notebook, isLoading: notebookLoading } = useNotebook(notebookId);
-  const { data: documents, isLoading: docsLoading } = useDocuments(notebookId);
+  const {
+    data: documents,
+    isLoading: docsLoading,
+    refetch: refetchDocuments,
+  } = useDocuments(notebookId);
   const uploadDocument = useUploadDocument(notebookId);
   const createThread = useCreateThread(notebookId);
 
-  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [localDocs, setLocalDocs] = useState<Document[]>([]);
 
   const handleNewChat = useCallback(async () => {
     try {
@@ -63,122 +71,203 @@ export function LeftPanel({ notebookId }: LeftPanelProps) {
     }
   }, [createThread, notebookId, router]);
 
-  const handleUpload = async () => {
-    if (uploadFiles.length === 0) return;
-    try {
-      for (const file of uploadFiles) {
-        await uploadDocument.mutateAsync({ file, title: file.name });
-      }
-      setUploadFiles([]);
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
   const handleFileSelect = (files: FileList | null) => {
     if (!files?.length) return;
-    setUploadFiles(Array.from(files));
+
+    const selectedFiles = Array.from(files);
+    setUploadDialogOpen(false);
+
+    const optimisticDocs = selectedFiles.map((file, idx) => {
+      const now = Math.floor(Date.now() / 1000);
+      return {
+        doc_id: `local-${Date.now()}-${idx}`,
+        original_filename: file.name,
+        file_type: file.type || "unknown",
+        file_size: file.size,
+        title: file.name,
+        status: "processing" as DocumentStatus,
+        created_at: now,
+        outline: [],
+        stats: {},
+      } satisfies Document;
+    });
+
+    setLocalDocs((prev) => [...optimisticDocs, ...prev]);
+
+    void (async () => {
+      for (const [i, file] of selectedFiles.entries()) {
+        const optimisticDoc = optimisticDocs[i];
+        if (!optimisticDoc) continue;
+        try {
+          const result = await uploadDocument.mutateAsync({ file, title: file.name });
+          setLocalDocs((prev) =>
+            prev.map((doc) => (doc.doc_id === optimisticDoc.doc_id ? result.document : doc))
+          );
+        } catch (e) {
+          console.error(e);
+          setLocalDocs((prev) =>
+            prev.map((doc) =>
+              doc.doc_id === optimisticDoc.doc_id
+                ? {
+                    ...doc,
+                    status: "failed",
+                    error_message: "上传失败",
+                  }
+                : doc
+            )
+          );
+        }
+      }
+      void refetchDocuments();
+    })();
   };
+
+  useEffect(() => {
+    if (!documents?.length) return;
+    setLocalDocs((prev) =>
+      prev.filter((localDoc) => {
+        if (localDoc.doc_id.startsWith("local-")) {
+          return true;
+        }
+        return !documents.some((doc) => doc.doc_id === localDoc.doc_id);
+      })
+    );
+  }, [documents]);
+
+  const mergedDocuments = useMemo(() => {
+    const docs = [...localDocs, ...(documents ?? [])];
+    const seen = new Set<string>();
+    return docs.filter((doc) => {
+      const filename = doc.original_filename ?? "";
+      const title = doc.title ?? "";
+      if (filename.startsWith("mnd_") || title.startsWith("mnd_")) {
+        return false;
+      }
+      if (seen.has(doc.doc_id)) return false;
+      seen.add(doc.doc_id);
+      return true;
+    });
+  }, [documents, localDocs]);
+
+  useEffect(() => {
+    const hasProcessing = mergedDocuments.some(
+      (doc) => doc.status === "pending" || doc.status === "processing"
+    );
+    if (!hasProcessing) return;
+
+    const timer = window.setInterval(() => {
+      void refetchDocuments();
+    }, 1500);
+
+    return () => window.clearInterval(timer);
+  }, [mergedDocuments, refetchDocuments]);
 
   if (!leftOpen) return null;
 
   return (
-    <div className="flex h-full flex-col">
-      {/* Header */}
-      <div className="flex h-12 shrink-0 items-center justify-between border-b border-border/50 px-3">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          <span className="truncate text-sm font-medium">
-            {notebookLoading ? "..." : (notebook?.title ?? "Untitled")}
-          </span>
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={() => router.push("/notebooks")}
-            title="Back to notebooks"
+    <Tabs defaultValue="sources" className="flex h-full min-h-0 flex-1 flex-col">
+      <div className="relative flex h-14 shrink-0 items-center justify-center border-b border-border/50 px-3">
+        <TabsList className="grid h-10 w-[220px] grid-cols-2 rounded-full bg-muted/70 p-1">
+          <TabsTrigger
+            value="sources"
+            className="rounded-full text-sm font-semibold data-[state=active]:bg-background"
           >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleLeft}>
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-
-      {/* Tabs Content */}
-      <Tabs defaultValue="sources" className="flex min-h-0 flex-1 flex-col">
-        <TabsList className="mx-3 mt-3 grid h-10 grid-cols-2 rounded-lg border border-border/70 bg-transparent p-0">
-          <TabsTrigger value="sources" className="rounded-none text-base font-semibold">
             资料
           </TabsTrigger>
-          <TabsTrigger value="history" className="rounded-none text-base font-semibold">
+          <TabsTrigger
+            value="history"
+            className="rounded-full text-sm font-semibold data-[state=active]:bg-background"
+          >
             对话
           </TabsTrigger>
         </TabsList>
+      </div>
 
-        <TabsContent value="sources" className="mt-0 flex min-h-0 flex-1 flex-col">
-          <div className="flex shrink-0 flex-col gap-2 px-3 py-2">
-            <input
-              id="upload-input"
-              type="file"
-              multiple
-              className="hidden"
-              accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.md"
-              onChange={(e) => handleFileSelect(e.target.files)}
-            />
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="h-10 w-full gap-1.5 rounded-xl border border-border/60 bg-background text-sm"
-              onClick={() => document.getElementById("upload-input")?.click()}
-            >
-              <Upload className="h-3.5 w-3.5" />
-              选择文件
-            </Button>
-            {uploadFiles.length > 0 && (
-              <div className="flex flex-col gap-2">
-                <ul className="text-muted-foreground max-h-20 space-y-1 overflow-y-auto text-[11px]">
-                  {uploadFiles.map((f) => (
-                    <li key={f.name} className="truncate">
-                      {f.name}
-                    </li>
-                  ))}
-                </ul>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={() => void handleUpload()}
-                  disabled={uploadDocument.isPending}
-                >
-                  {uploadDocument.isPending ? "上传中..." : "确认上传"}
-                </Button>
-              </div>
-            )}
+      <TabsContent value="sources" className="mt-0 flex min-h-0 flex-1 flex-col">
+          <div className="flex shrink-0 items-center justify-between px-3 py-2">
+            <span className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
+              资料
+            </span>
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                title="搜索"
+                disabled
+              >
+                <Search className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                title="添加资料"
+                onClick={() => setUploadDialogOpen(true)}
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
-          <ScrollArea className="min-h-0 flex-1 px-2 pb-3">
+
+          <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+            <DialogContent className="sm:max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>添加资料</DialogTitle>
+              </DialogHeader>
+              <div className="py-1">
+                <input
+                  id="upload-input"
+                  type="file"
+                  multiple
+                  className="hidden"
+                  accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.md"
+                  onChange={(e) => {
+                    handleFileSelect(e.target.files);
+                    e.currentTarget.value = "";
+                  }}
+                />
+                <button
+                  type="button"
+                  className="border-border/70 hover:bg-muted/40 flex h-56 w-full flex-col items-center justify-center rounded-2xl border border-dashed transition-colors"
+                  onClick={() => document.getElementById("upload-input")?.click()}
+                >
+                  <div className="bg-background mb-5 flex h-16 w-16 items-center justify-center rounded-full border border-border">
+                    <Upload className="h-7 w-7" />
+                  </div>
+                  <p className="text-center text-2xl font-medium">拖拽文件到这里，或点击上传文件</p>
+                  <p className="text-muted-foreground mt-3 text-sm">支持 PDF、Office 与文本文件</p>
+                </button>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-2 pb-3">
             {docsLoading && (
               <p className="text-muted-foreground px-2 py-4 text-xs">加载文档...</p>
             )}
-            {!docsLoading && (!documents || documents.length === 0) && (
+            {!docsLoading && mergedDocuments.length === 0 && (
               <p className="text-muted-foreground px-2 py-6 text-center text-xs">
                 暂无资料
                 <br />
                 支持 PDF、Office 与文本文件
               </p>
             )}
-            <ul className="space-y-1">
-              {documents?.map((doc) => (
-                <DocumentRow key={doc.doc_id} doc={doc} notebookId={notebookId} />
+            <ul className="w-full space-y-1">
+              {mergedDocuments.map((doc) => (
+                <DocumentRow
+                  key={doc.doc_id}
+                  doc={doc}
+                  notebookId={notebookId}
+                />
               ))}
             </ul>
-          </ScrollArea>
-        </TabsContent>
+          </div>
+      </TabsContent>
 
-        <TabsContent value="history" className="mt-0 flex min-h-0 flex-1 flex-col">
+      <TabsContent value="history" className="mt-0 flex min-h-0 flex-1 flex-col">
           <div className="flex shrink-0 items-center justify-between px-3 py-2">
             <span className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
               对话历史
@@ -195,59 +284,161 @@ export function LeftPanel({ notebookId }: LeftPanelProps) {
               新对话
             </Button>
           </div>
-          <ScrollArea className="min-h-0 flex-1 px-2 pb-3">
+          <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
             <ThreadList notebookId={notebookId} />
-          </ScrollArea>
-        </TabsContent>
-      </Tabs>
-    </div>
+          </div>
+      </TabsContent>
+    </Tabs>
   );
 }
 
-function DocumentRow({ doc, notebookId }: { doc: Document; notebookId: string }) {
-  const { locale } = useI18n();
-  const dateLocale = locale === "zh-CN" ? zhCN : enUS;
+function DocumentRow({
+  doc,
+  notebookId,
+}: {
+  doc: Document;
+  notebookId: string;
+}) {
   const deleteDocument = useDeleteDocument(notebookId);
+  const renameDocument = useRenameDocument(notebookId);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState(doc.title);
+  const isLocalDoc = doc.doc_id.startsWith("local-");
+  const isProcessing = doc.status === "pending" || doc.status === "processing";
+  const isFailed = doc.status === "failed";
+
+  const statusText: Record<DocumentStatus, string> = {
+    pending: "处理中",
+    processing: "处理中",
+    ready: "",
+    failed: "失败",
+  };
 
   return (
-    <li className="group flex items-start gap-3 rounded-3xl border border-border/60 bg-background p-3">
-      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-        <FileText className="h-4 w-4" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="line-clamp-2 text-base font-semibold leading-snug">{doc.title}</p>
-        <p className="text-muted-foreground mt-1 text-xs">
-          {formatDistanceToNow(new Date(doc.created_at * 1000), {
-            addSuffix: true,
-            locale: dateLocale,
-          })}{" "}
-          · {doc.status}
-        </p>
-      </div>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        className="h-8 w-8 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
-        title="删除"
-        onClick={() => {
-          if (confirm("确定删除该文档？")) deleteDocument.mutate(doc.doc_id);
-        }}
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-      </Button>
-    </li>
+    <>
+      <li className="group flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-2 hover:bg-muted/50">
+        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-emerald-50 text-emerald-600">
+          <FileText className="h-3.5 w-3.5" />
+        </div>
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <p
+            className="min-w-0 flex-1 truncate text-sm font-medium"
+            title={doc.title}
+          >
+            {doc.title}
+          </p>
+          {(isProcessing || isFailed) && (
+            <span
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1 text-xs",
+                isFailed ? "text-destructive" : "text-muted-foreground"
+              )}
+            >
+              {isProcessing && (
+                <span className="bg-primary/70 inline-block h-1.5 w-1.5 animate-pulse rounded-full" />
+              )}
+              {statusText[doc.status] ?? doc.status}
+            </span>
+          )}
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="h-8 w-8 shrink-0 rounded-xl bg-muted/70 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:bg-muted hover:text-foreground"
+              title="更多"
+            >
+              <MoreHorizontal className="h-3.5 w-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              disabled={isLocalDoc || renameDocument.isPending}
+              onClick={() => {
+                setRenameValue(doc.title);
+                setRenameOpen(true);
+              }}
+            >
+              重命名
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="text-destructive"
+              disabled={isLocalDoc || deleteDocument.isPending}
+              onClick={() => setDeleteOpen(true)}
+            >
+              删除
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </li>
+
+      <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>重命名</DialogTitle>
+          </DialogHeader>
+          <Input
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            placeholder="输入新名称"
+            autoFocus
+          />
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setRenameOpen(false)}>
+              取消
+            </Button>
+            <Button
+              onClick={() => {
+                const nextTitle = renameValue.trim();
+                if (!nextTitle || nextTitle === doc.title) {
+                  setRenameOpen(false);
+                  return;
+                }
+                void renameDocument
+                  .mutateAsync({ docId: doc.doc_id, title: nextTitle })
+                  .then(() => setRenameOpen(false));
+              }}
+              disabled={renameDocument.isPending}
+            >
+              {renameDocument.isPending ? "保存中..." : "确定"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>删除资料</DialogTitle>
+          </DialogHeader>
+          <p className="text-muted-foreground text-sm">确定删除这份资料吗？</p>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleteOpen(false)}>
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={isLocalDoc || deleteDocument.isPending}
+              onClick={() => {
+                void deleteDocument.mutateAsync(doc.doc_id).then(() => setDeleteOpen(false));
+              }}
+            >
+              {deleteDocument.isPending ? "删除中..." : "删除"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
 function ThreadList({ notebookId }: { notebookId: string }) {
   const router = useRouter();
-  const pathname = usePathname();
   const params = useParams<{ threadId?: string }>();
   const threadIdFromRoute = params.threadId;
-  const pathSegments = pathname.split("/").filter(Boolean);
-  const chatsIdx = pathSegments.lastIndexOf("chats");
-  const isChatsRoot = chatsIdx >= 0 && chatsIdx === pathSegments.length - 1;
 
   const { data: notebook, isLoading } = useNotebook(notebookId);
 
@@ -272,23 +463,8 @@ function ThreadList({ notebookId }: { notebookId: string }) {
 
   return (
     <ul className="space-y-0.5">
-      <li>
-        <button
-          type="button"
-          onClick={() => router.push(`/workspace/notebooks/${notebookId}/chats`)}
-          className={cn(
-            "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors",
-            isChatsRoot
-              ? "bg-accent/10 text-foreground font-medium"
-              : "hover:bg-muted/40 text-muted-foreground"
-          )}
-        >
-          <MessageSquare className="h-4 w-4 shrink-0 opacity-80" />
-          <span className="min-w-0 flex-1 truncate">新对话</span>
-        </button>
-      </li>
       {threadIds.map((tid) => {
-        const active = !isChatsRoot && threadIdFromRoute === tid;
+        const active = threadIdFromRoute === tid;
         return (
           <li key={tid}>
             <button
@@ -326,7 +502,7 @@ function ThreadList({ notebookId }: { notebookId: string }) {
       })}
       {!isLoading && threadIds.length === 0 && (
         <li className="text-muted-foreground px-2 py-6 text-center text-xs">
-          暂无会话，点击「新对话」开始。
+          暂无会话，系统将自动创建。
         </li>
       )}
     </ul>

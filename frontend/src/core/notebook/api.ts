@@ -130,6 +130,17 @@ export async function deleteDocument(
   });
 }
 
+export async function renameDocument(
+  notebookId: string,
+  docId: string,
+  title: string
+): Promise<{ document: Document }> {
+  return fetchJson(`${API_BASE}/${notebookId}/documents/${encodeURIComponent(docId)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ title }),
+  });
+}
+
 export async function getDocumentProcessingStatus(
   notebookId: string,
   docId: string

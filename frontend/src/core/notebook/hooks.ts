@@ -128,6 +128,18 @@ export function useDeleteDocument(notebookId: string) {
   });
 }
 
+export function useRenameDocument(notebookId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ docId, title }: { docId: string; title: string }) =>
+      notebookApi.renameDocument(notebookId, docId, title),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.documents(notebookId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.detail(notebookId) });
+    },
+  });
+}
+
 export function useDocumentProcessingStatus(
   notebookId: string,
   docId: string,

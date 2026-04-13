@@ -55,6 +55,10 @@ class DocumentResponse(BaseModel):
     document: Document
 
 
+class UpdateDocumentRequest(BaseModel):
+    title: str
+
+
 class ThreadCreateResponse(BaseModel):
     thread_id: str
 
@@ -236,6 +240,26 @@ async def delete_document(notebook_id: str, doc_id: str, user: User = Depends(ge
         return {"success": True, "message": f"Deleted document {doc_id}"}
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Document not found")
+
+
+@router.put("/{notebook_id}/documents/{doc_id}", response_model=DocumentResponse)
+async def rename_document(
+    notebook_id: str,
+    doc_id: str,
+    request: UpdateDocumentRequest,
+    user: User = Depends(get_current_user),
+):
+    """Rename a document in a notebook."""
+    _notebook_owned_or_404(notebook_id, user.id)
+    try:
+        doc = _manager().rename_document(notebook_id, doc_id, request.title)
+        return {"document": doc}
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Document not found")
+    except FileExistsError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.get("/{notebook_id}/documents/{doc_id}/status", response_model=ProcessingStatusResponse)

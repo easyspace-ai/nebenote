@@ -150,8 +150,8 @@ class NotebookManager:
         """Persist the dedicated upload thread for notebook library uploads."""
         notebook = self.get_notebook(notebook_id)
         notebook.settings.upload_thread_id = thread_id
-        if thread_id not in notebook.thread_ids:
-            notebook.thread_ids.append(thread_id)
+        # DO NOT add upload thread to thread_ids - it's a background system thread
+        # not a user-facing conversation thread
         notebook.updated_at = time.time()
         self._save_notebook(notebook)
 
@@ -194,6 +194,51 @@ class NotebookManager:
             raise FileNotFoundError(f"Document not found: {doc_id}")
         return self._document_from_upload_path(notebook_id, path)
 
+    def _rename_markdown_sidecars(self, uploads_dir: Path, old_name: str, new_name: str) -> None:
+        """Rename markdown companions for both legacy and mnd_ naming conventions."""
+        old_stem = Path(old_name).stem
+        new_stem = Path(new_name).stem
+
+        legacy_old = uploads_dir / f"{old_stem}.md"
+        legacy_new = uploads_dir / f"{new_stem}.md"
+        if legacy_old.is_file() and not legacy_new.exists():
+            legacy_old.rename(legacy_new)
+
+        mnd_old = uploads_dir / f"mnd_{old_stem}.md"
+        mnd_new = uploads_dir / f"mnd_{new_stem}.md"
+        if mnd_old.is_file() and not mnd_new.exists():
+            mnd_old.rename(mnd_new)
+
+    def rename_document(self, notebook_id: str, doc_id: str, title: str) -> Document:
+        """Rename an upload by changing its on-disk filename and returning updated metadata."""
+        safe_old = normalize_filename(unquote(doc_id))
+        safe_title = normalize_filename(title.strip())
+
+        uploads_dir = self.paths.uploads_dir(notebook_id)
+        source = uploads_dir / safe_old
+        if not source.is_file():
+            raise FileNotFoundError(f"Document not found: {doc_id}")
+
+        old_suffix = Path(safe_old).suffix
+        # Keep original extension stable; title is only the display stem input.
+        next_stem = Path(safe_title).stem
+        if not next_stem:
+            raise ValueError("Title cannot be empty")
+        safe_new = f"{next_stem}{old_suffix}"
+
+        if safe_new == safe_old:
+            return self.get_document(notebook_id, safe_old)
+
+        target = uploads_dir / safe_new
+        if target.exists():
+            raise FileExistsError(f"Document already exists: {safe_new}")
+
+        source.rename(target)
+        self._rename_markdown_sidecars(uploads_dir, safe_old, safe_new)
+
+        logger.info("Renamed upload %s -> %s in notebook %s", safe_old, safe_new, notebook_id)
+        return self._document_from_upload_path(notebook_id, target)
+
     def delete_document(self, notebook_id: str, doc_id: str) -> None:
         """Delete an upload (and companion .md when applicable)."""
         safe = normalize_filename(unquote(doc_id))
@@ -203,6 +248,8 @@ class NotebookManager:
             safe,
             convertible_extensions=CONVERTIBLE_EXTENSIONS,
         )
+        # Also clean up current conversion naming convention: mnd_<stem>.md
+        (uploads_dir / f"mnd_{Path(safe).stem}.md").unlink(missing_ok=True)
         logger.info("Deleted upload %s from notebook %s", safe, notebook_id)
 
     def get_document_processing_status(self, notebook_id: str, doc_id: str) -> dict[str, Any]:
