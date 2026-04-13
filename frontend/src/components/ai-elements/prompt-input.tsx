@@ -953,7 +953,7 @@ export const PromptInputTextarea = ({
 
   return (
     <InputGroupTextarea
-      className={cn("field-sizing-content max-h-48 min-h-16", className)}
+      className={cn("field-sizing-content max-h-48 min-h-14 text-sm", className)}
       name="message"
       onCompositionEnd={() => setIsComposing(false)}
       onCompositionStart={() => setIsComposing(true)}
@@ -1080,20 +1080,20 @@ export const PromptInputSubmit = ({
   children,
   ...props
 }: PromptInputSubmitProps) => {
-  let Icon = <ArrowUpIcon className="size-4" />;
+  let Icon = <ArrowUpIcon className="size-3.5" />;
 
   if (status === "submitted") {
-    Icon = <Loader2Icon className="size-4 animate-spin" />;
+    Icon = <Loader2Icon className="size-3.5 animate-spin" />;
   } else if (status === "streaming") {
-    Icon = <SquareIcon className="size-4" />;
+    Icon = <SquareIcon className="size-3.5" />;
   } else if (status === "error") {
-    Icon = <XIcon className="size-4" />;
+    Icon = <XIcon className="size-3.5" />;
   }
 
   return (
     <InputGroupButton
       aria-label="Submit"
-      className={cn(className)}
+      className={cn("h-6 w-6 rounded-md", className)}
       size={size}
       type="submit"
       variant={variant}
@@ -1286,8 +1286,8 @@ export const PromptInputSelectTrigger = ({
 }: PromptInputSelectTriggerProps) => (
   <SelectTrigger
     className={cn(
-      "text-muted-foreground border-none bg-transparent font-medium shadow-none transition-colors",
-      "hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground",
+      "text-muted-foreground/80 border-none bg-transparent text-xs font-medium shadow-none transition-colors",
+      "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground",
       className,
     )}
     {...props}

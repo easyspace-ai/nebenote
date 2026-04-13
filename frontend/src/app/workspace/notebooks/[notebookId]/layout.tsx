@@ -3,6 +3,8 @@
 import { useParams } from "next/navigation";
 import { useEffect, useLayoutEffect } from "react";
 
+import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
+import { ArtifactsProvider } from "@/components/workspace/artifacts";
 import { useSidebar } from "@/components/ui/sidebar";
 import { LeftPanel } from "@/components/workspace/notebooks/left-panel";
 import { NotebookLayout } from "@/components/workspace/notebooks/notebook-layout";
@@ -35,13 +37,17 @@ export default function NotebookIdLayout({
   }, [setOpen, notebookId]);
 
   return (
-    <NotebookLayout
-      notebookId={notebookId}
-      leftPanel={<LeftPanel notebookId={notebookId} />}
-      rightPanel={<RightPanel notebookId={notebookId} />}
-      topBar={<TopBar notebookId={notebookId} notebookTitle={notebook?.title} />}
-    >
-      {children}
-    </NotebookLayout>
+    <ArtifactsProvider>
+      <PromptInputProvider>
+        <NotebookLayout
+          notebookId={notebookId}
+          leftPanel={<LeftPanel notebookId={notebookId} />}
+          rightPanel={<RightPanel notebookId={notebookId} />}
+          topBar={<TopBar notebookId={notebookId} notebookTitle={notebook?.title} />}
+        >
+          {children}
+        </NotebookLayout>
+      </PromptInputProvider>
+    </ArtifactsProvider>
   );
 }

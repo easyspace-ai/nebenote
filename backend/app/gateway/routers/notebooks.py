@@ -7,8 +7,9 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
+from app.gateway.deps import get_checkpointer, get_store
 from app.gateway.routers.auth import User, get_current_user
-from app.gateway.routers.threads import create_thread_record
+from app.gateway.routers.threads import THREADS_NS, create_thread_record
 from deerflow.notebook import (
     Document,
     DocumentStatus,
@@ -75,6 +76,37 @@ def _manager() -> NotebookManager:
     return get_notebook_manager()
 
 
+async def _thread_exists(request: Request, thread_id: str) -> bool:
+    """Check whether a thread exists in runtime storage/checkpoints."""
+    checkpointer = get_checkpointer(request)
+    config = {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}
+    try:
+        checkpoint_tuple = await checkpointer.aget_tuple(config)
+        if checkpoint_tuple is not None:
+            return True
+    except Exception:
+        logger.debug("Failed to resolve checkpoint for thread %s", thread_id, exc_info=True)
+
+    store = get_store(request)
+    if store is None:
+        return False
+
+    try:
+        return await store.aget(THREADS_NS, thread_id) is not None
+    except Exception:
+        logger.debug("Failed to resolve store record for thread %s", thread_id, exc_info=True)
+        return False
+
+
+async def _filter_existing_thread_ids(request: Request, thread_ids: list[str]) -> list[str]:
+    """Keep only thread IDs that still exist in runtime metadata/checkpoints."""
+    existing: list[str] = []
+    for thread_id in thread_ids:
+        if await _thread_exists(request, thread_id):
+            existing.append(thread_id)
+    return existing
+
+
 async def _get_or_create_upload_thread(notebook_id: str, request: Request) -> str:
     """Thread used for notebook uploads (same sandbox + conversion pipeline as chat uploads)."""
     nb = _manager().get_notebook(notebook_id)
@@ -112,16 +144,23 @@ async def create_notebook(request: CreateNotebookRequest, user: User = Depends(g
 
 
 @router.get("", response_model=NotebookListResponse)
-async def list_notebooks(user: User = Depends(get_current_user)):
+async def list_notebooks(request: Request, user: User = Depends(get_current_user)):
     """List notebooks owned by the current user."""
     notebooks = _manager().list_notebooks(owner_id=user.id)
+    filtered: list[Notebook] = []
+    for notebook in notebooks:
+        filtered_thread_ids = await _filter_existing_thread_ids(request, notebook.thread_ids)
+        filtered.append(notebook.model_copy(update={"thread_ids": filtered_thread_ids}))
+    notebooks = filtered
     return {"notebooks": notebooks}
 
 
 @router.get("/{notebook_id}", response_model=NotebookResponse)
-async def get_notebook(notebook_id: str, user: User = Depends(get_current_user)):
+async def get_notebook(notebook_id: str, request: Request, user: User = Depends(get_current_user)):
     """Get a notebook by ID."""
     notebook = _notebook_owned_or_404(notebook_id, user.id)
+    filtered_thread_ids = await _filter_existing_thread_ids(request, notebook.thread_ids)
+    notebook = notebook.model_copy(update={"thread_ids": filtered_thread_ids})
     return {"notebook": notebook}
 
 
@@ -314,11 +353,12 @@ async def create_thread(
 
 
 @router.get("/{notebook_id}/threads")
-async def list_threads(notebook_id: str, user: User = Depends(get_current_user)):
+async def list_threads(notebook_id: str, request: Request, user: User = Depends(get_current_user)):
     """List all threads in a notebook."""
     _notebook_owned_or_404(notebook_id, user.id)
     try:
         thread_ids = _manager().list_threads(notebook_id)
+        thread_ids = await _filter_existing_thread_ids(request, thread_ids)
         return {"thread_ids": thread_ids}
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Notebook not found")

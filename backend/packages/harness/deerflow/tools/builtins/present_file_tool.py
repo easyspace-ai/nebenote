@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from typing import Annotated
 
@@ -10,6 +11,53 @@ from deerflow.agents.thread_state import ThreadState
 from deerflow.config.paths import VIRTUAL_PATH_PREFIX, get_paths
 
 OUTPUTS_VIRTUAL_PREFIX = f"{VIRTUAL_PATH_PREFIX}/outputs"
+
+_DEERFLOW_IN_NAME = re.compile(r"deerflow", re.IGNORECASE)
+_BRAND_REPLACEMENT = "metanote"
+
+
+def _unique_destination_path(dest: Path) -> Path:
+    """Pick dest if unused; otherwise dest stem with _N suffix before suffix."""
+    if not dest.exists():
+        return dest
+    parent = dest.parent
+    stem = dest.stem
+    suffix = dest.suffix
+    n = 2
+    while True:
+        candidate = parent / f"{stem}_{n}{suffix}"
+        if not candidate.exists():
+            return candidate
+        n += 1
+
+
+def _maybe_rename_deerflow_basename(outputs_dir: Path, actual_path: Path) -> Path:
+    """Rename file under outputs if its basename contains 'deerflow' (any case).
+
+    Replaces every occurrence in the **filename only** with 'metanote', e.g.
+    deerflow_intro.md -> metanote_intro.md, deerflow-intro.pptx -> metanote-intro.pptx.
+    """
+    outputs_dir = outputs_dir.resolve()
+    actual_path = actual_path.resolve()
+    try:
+        rel = actual_path.relative_to(outputs_dir)
+    except ValueError:
+        return actual_path
+
+    parent, name = rel.parent, rel.name
+    if not _DEERFLOW_IN_NAME.search(name):
+        return actual_path
+
+    new_name = _DEERFLOW_IN_NAME.sub(_BRAND_REPLACEMENT, name)
+    dest = (outputs_dir / parent / new_name).resolve()
+    try:
+        dest.relative_to(outputs_dir)
+    except ValueError:
+        return actual_path
+
+    dest = _unique_destination_path(dest)
+    actual_path.rename(dest)
+    return dest
 
 
 def _normalize_presented_filepath(
@@ -51,10 +99,16 @@ def _normalize_presented_filepath(
     else:
         actual_path = Path(filepath).expanduser().resolve()
 
+    if not actual_path.exists() or not actual_path.is_file():
+        raise ValueError(f"File not found: {filepath}")
+
     try:
-        relative_path = actual_path.relative_to(outputs_dir)
+        actual_path.relative_to(outputs_dir)
     except ValueError as exc:
         raise ValueError(f"Only files in {OUTPUTS_VIRTUAL_PREFIX} can be presented: {filepath}") from exc
+
+    actual_path = _maybe_rename_deerflow_basename(outputs_dir, actual_path)
+    relative_path = actual_path.relative_to(outputs_dir)
 
     return f"{OUTPUTS_VIRTUAL_PREFIX}/{relative_path.as_posix()}"
 

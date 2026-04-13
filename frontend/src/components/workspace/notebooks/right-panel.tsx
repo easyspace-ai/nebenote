@@ -1,14 +1,29 @@
 "use client";
 
-import { Sparkles, FileText, AudioLines, Presentation, Brain, Map, Microscope, X } from "lucide-react";
-import { useParams } from "next/navigation";
-import { useEffect, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  AudioLines,
+  Brain,
+  Eye,
+  LoaderCircle,
+  FileText,
+  Map,
+  Microscope,
+  Presentation,
+  Sparkles,
+  X,
+} from "lucide-react";
+import { useMemo, useState } from "react";
 
 import { useOptionalPromptInputController } from "@/components/ai-elements/prompt-input";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useArtifactsOptional } from "@/components/workspace/artifacts/context";
-import { useThreadOptional } from "@/components/workspace/messages/context";
+import { ArtifactFileDetail } from "@/components/workspace/artifacts";
+import { getAPIClient } from "@/core/api";
+import { useNotebook } from "@/core/notebook/hooks";
+import type { AgentThreadState } from "@/core/threads/types";
+import { getFileExtensionDisplayName, getFileIcon, getFileName } from "@/core/utils/files";
 
 import { useNotebookLayout } from "./notebook-layout";
 
@@ -144,36 +159,63 @@ interface RightPanelProps {
   notebookId: string;
 }
 
-export function RightPanel({ notebookId: _notebookId }: RightPanelProps) {
+interface NotebookArtifactItem {
+  key: string;
+  filepath: string;
+  threadId: string;
+}
+
+export function RightPanel({ notebookId }: RightPanelProps) {
   const { rightOpen, toggleRight } = useNotebookLayout();
-  const threadContext = useThreadOptional();
-  const artifactsContext = useArtifactsOptional();
   const promptInputController = useOptionalPromptInputController();
+  const [previewArtifact, setPreviewArtifact] = useState<NotebookArtifactItem | null>(null);
+  const { data: notebook } = useNotebook(notebookId);
+  const notebookThreadIds = notebook?.thread_ids ?? [];
+  const { data: notebookArtifacts = [], isLoading: isNotebookArtifactsLoading } = useQuery({
+    queryKey: ["notebook-artifacts", notebookId, notebookThreadIds],
+    enabled: notebookThreadIds.length > 0,
+    queryFn: async (): Promise<NotebookArtifactItem[]> => {
+      const apiClient = getAPIClient();
+      const settled = await Promise.all(
+        notebookThreadIds.map(async (threadId) => {
+          try {
+            const state = await apiClient.threads.getState<AgentThreadState>(threadId);
+            return {
+              threadId,
+              artifacts: state.values?.artifacts ?? [],
+            };
+          } catch {
+            return {
+              threadId,
+              artifacts: [],
+            };
+          }
+        }),
+      );
 
-  const thread = threadContext?.thread;
-  useParams<{ threadId?: string }>();
+      const items: NotebookArtifactItem[] = [];
+      const seen = new Set<string>();
+      for (let i = settled.length - 1; i >= 0; i -= 1) {
+        const group = settled[i];
+        if (!group) continue;
+        for (const filepath of group.artifacts) {
+          if (!filepath || seen.has(filepath)) continue;
+          seen.add(filepath);
+          items.push({
+            key: `${group.threadId}:${filepath}`,
+            filepath,
+            threadId: group.threadId,
+          });
+        }
+      }
+      return items;
+    },
+  });
+
   const artifactFiles = useMemo(
-    () => thread?.values.artifacts ?? [],
-    [thread?.values.artifacts],
+    () => notebookArtifacts.map((item) => item.filepath),
+    [notebookArtifacts],
   );
-
-  useEffect(() => {
-    if (!artifactsContext) return;
-    const { setArtifacts, deselect, setOpen: setArtifactsOpen } = artifactsContext;
-    setArtifacts(artifactFiles);
-    if (!artifactFiles.length) {
-      deselect();
-      setArtifactsOpen(false);
-      return;
-    }
-    if (
-      artifactsContext.selectedArtifact &&
-      !artifactFiles.includes(artifactsContext.selectedArtifact)
-    ) {
-      deselect();
-      setArtifactsOpen(false);
-    }
-  }, [artifactFiles, artifactsContext]);
 
   const handleCardClick = (config: GenerationConfig) => {
     // Try via context first
@@ -229,9 +271,8 @@ export function RightPanel({ notebookId: _notebookId }: RightPanelProps) {
         </Button>
       </div>
 
-      {/* Content - Only show generate grid, no tabs */}
       <div className="flex min-h-0 flex-1 flex-col">
-        <ScrollArea className="flex-1 px-3 py-3">
+        <div className="px-3 py-3">
           <div className="grid grid-cols-2 gap-3">
             {generationConfigs.map((config) => {
               const Icon = config.icon;
@@ -245,8 +286,78 @@ export function RightPanel({ notebookId: _notebookId }: RightPanelProps) {
               );
             })}
           </div>
-        </ScrollArea>
+        </div>
+
+        <div className="flex min-h-0 flex-1 flex-col border-t border-border/50 px-3 py-3">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              笔记本产物
+            </span>
+            <span className="text-xs text-muted-foreground">{artifactFiles.length}</span>
+          </div>
+          <ScrollArea className="min-h-0 flex-1">
+            {isNotebookArtifactsLoading ? (
+              <div className="flex items-center justify-center py-8 text-xs text-muted-foreground">
+                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                加载产物中...
+              </div>
+            ) : artifactFiles.length === 0 ? (
+              <p className="py-6 text-center text-xs text-muted-foreground">
+                暂无产物
+              </p>
+            ) : (
+              <ul className="space-y-1 pr-2">
+                {notebookArtifacts.map((artifact) => (
+                  <li key={artifact.key}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPreviewArtifact(artifact);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left transition-colors hover:bg-muted/60"
+                    >
+                      <div className="shrink-0 text-primary">
+                        {getFileIcon(artifact.filepath, "h-4 w-4")}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-foreground">
+                          {getFileName(artifact.filepath)}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {getFileExtensionDisplayName(artifact.filepath)} file
+                        </p>
+                      </div>
+                      <Eye className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </ScrollArea>
+        </div>
       </div>
+
+      <Dialog
+        open={Boolean(previewArtifact)}
+        onOpenChange={(open) => {
+          if (!open) setPreviewArtifact(null);
+        }}
+      >
+        <DialogContent className="h-[82vh] max-w-6xl overflow-hidden p-0">
+          <DialogTitle className="sr-only">Artifact preview</DialogTitle>
+          {previewArtifact ? (
+            <ArtifactFileDetail
+              className="h-full w-full"
+              filepath={previewArtifact.filepath}
+              threadId={previewArtifact.threadId}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+              当前会话不可预览该产物
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

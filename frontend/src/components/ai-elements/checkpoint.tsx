@@ -20,13 +20,13 @@ export const Checkpoint = ({
 }: CheckpointProps) => (
   <div
     className={cn(
-      "text-muted-foreground flex items-center gap-0.5 overflow-hidden",
+      "text-muted-foreground/70 flex items-center gap-1 overflow-hidden text-xs",
       className,
     )}
     {...props}
   >
     {children}
-    <Separator />
+    <Separator className="bg-border/50" />
   </div>
 );
 
@@ -38,7 +38,7 @@ export const CheckpointIcon = ({
   ...props
 }: CheckpointIconProps) =>
   children ?? (
-    <BookmarkIcon className={cn("size-4 shrink-0", className)} {...props} />
+    <BookmarkIcon className={cn("size-3.5 shrink-0 opacity-60", className)} {...props} />
   );
 
 export type CheckpointTriggerProps = ComponentProps<typeof Button> & {
@@ -49,14 +49,14 @@ export const CheckpointTrigger = ({
   children,
   className,
   variant = "ghost",
-  size = "sm",
+  size = "icon",
   tooltip,
   ...props
 }: CheckpointTriggerProps) =>
   tooltip ? (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button size={size} type="button" variant={variant} {...props}>
+        <Button size={size} type="button" variant={variant} className={cn("size-6", className)} {...props}>
           {children}
         </Button>
       </TooltipTrigger>
@@ -65,7 +65,7 @@ export const CheckpointTrigger = ({
       </TooltipContent>
     </Tooltip>
   ) : (
-    <Button size={size} type="button" variant={variant} {...props}>
+    <Button size={size} type="button" variant={variant} className={cn("size-6", className)} {...props}>
       {children}
     </Button>
   );

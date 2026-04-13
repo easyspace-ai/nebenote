@@ -467,9 +467,7 @@ function ThreadList({ notebookId }: { notebookId: string }) {
         const active = threadIdFromRoute === tid;
         return (
           <li key={tid}>
-            <button
-              type="button"
-              onClick={() => goToThread(tid)}
+            <div
               className={cn(
                 "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors group",
                 active
@@ -477,8 +475,14 @@ function ThreadList({ notebookId }: { notebookId: string }) {
                   : "hover:bg-muted text-muted-foreground"
               )}
             >
-              <MessageSquare className="h-4 w-4 shrink-0 opacity-80" />
-              <span className="min-w-0 flex-1 truncate">对话 · {tid.slice(0, 8)}</span>
+              <button
+                type="button"
+                onClick={() => goToThread(tid)}
+                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+              >
+                <MessageSquare className="h-4 w-4 shrink-0 opacity-80" />
+                <span className="min-w-0 flex-1 truncate">对话 · {tid.slice(0, 8)}</span>
+              </button>
               {active && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -486,7 +490,6 @@ function ThreadList({ notebookId }: { notebookId: string }) {
                       variant="ghost"
                       size="icon"
                       className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                      onClick={(e) => e.stopPropagation()}
                     >
                       <MoreHorizontal className="h-3 w-3" />
                     </Button>
@@ -496,7 +499,7 @@ function ThreadList({ notebookId }: { notebookId: string }) {
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
-            </button>
+            </div>
           </li>
         );
       })}

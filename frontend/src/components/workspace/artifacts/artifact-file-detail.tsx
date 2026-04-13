@@ -39,7 +39,7 @@ import { env } from "@/env";
 import { cn } from "@/lib/utils";
 
 import { ArtifactLink } from "../citations/artifact-link";
-import { useThread } from "../messages/context";
+import { useThreadOptional } from "../messages/context";
 import { Tooltip } from "../tooltip";
 
 import { useArtifacts } from "./context";
@@ -93,7 +93,8 @@ export function ArtifactFileDetail({
 
   const [viewMode, setViewMode] = useState<"code" | "preview">("code");
   const [isInstalling, setIsInstalling] = useState(false);
-  const { isMock } = useThread();
+  const threadContext = useThreadOptional();
+  const isMock = threadContext?.isMock ?? false;
   useEffect(() => {
     if (isSupportPreview) {
       setViewMode("preview");

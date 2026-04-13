@@ -47,7 +47,7 @@ export const Plan = ({
 }: PlanProps) => (
   <PlanContext.Provider value={{ isStreaming }}>
     <Collapsible asChild data-slot="plan" {...props}>
-      <Card className={cn("shadow-none", className)}>{children}</Card>
+      <Card className={cn("border-muted/60 bg-muted/20 shadow-none", className)}>{children}</Card>
     </Collapsible>
   </PlanContext.Provider>
 );
@@ -56,7 +56,7 @@ export type PlanHeaderProps = ComponentProps<typeof CardHeader>;
 
 export const PlanHeader = ({ className, ...props }: PlanHeaderProps) => (
   <CardHeader
-    className={cn("flex items-start justify-between", className)}
+    className={cn("flex items-start justify-between py-3", className)}
     data-slot="plan-header"
     {...props}
   />
@@ -73,7 +73,7 @@ export const PlanTitle = ({ children, ...props }: PlanTitleProps) => {
   const { isStreaming } = usePlan();
 
   return (
-    <CardTitle data-slot="plan-title" {...props}>
+    <CardTitle data-slot="plan-title" className="text-sm font-medium" {...props}>
       {isStreaming ? <Shimmer>{children}</Shimmer> : children}
     </CardTitle>
   );
@@ -95,7 +95,7 @@ export const PlanDescription = ({
 
   return (
     <CardDescription
-      className={cn("text-balance", className)}
+      className={cn("text-xs text-muted-foreground/80", className)}
       data-slot="plan-description"
       {...props}
     >
@@ -114,7 +114,7 @@ export type PlanContentProps = ComponentProps<typeof CardContent>;
 
 export const PlanContent = (props: PlanContentProps) => (
   <CollapsibleContent asChild>
-    <CardContent data-slot="plan-content" {...props} />
+    <CardContent className="pt-0" data-slot="plan-content" {...props} />
   </CollapsibleContent>
 );
 
@@ -129,13 +129,13 @@ export type PlanTriggerProps = ComponentProps<typeof CollapsibleTrigger>;
 export const PlanTrigger = ({ className, ...props }: PlanTriggerProps) => (
   <CollapsibleTrigger asChild>
     <Button
-      className={cn("size-8", className)}
+      className={cn("size-7 hover:bg-muted", className)}
       data-slot="plan-trigger"
       size="icon"
       variant="ghost"
       {...props}
     >
-      <ChevronsUpDownIcon className="size-4" />
+      <ChevronsUpDownIcon className="size-3.5 text-muted-foreground/70" />
       <span className="sr-only">Toggle plan</span>
     </Button>
   </CollapsibleTrigger>

@@ -66,3 +66,55 @@ def test_present_files_rejects_paths_outside_outputs(tmp_path):
 
     assert "artifacts" not in result.update
     assert result.update["messages"][0].content == f"Error: Only files in /mnt/user-data/outputs can be presented: {leaked_path}"
+
+
+def test_present_files_rejects_missing_file(tmp_path):
+    outputs_dir = tmp_path / "threads" / "thread-1" / "user-data" / "outputs"
+    outputs_dir.mkdir(parents=True)
+    missing = outputs_dir / "missing.md"
+
+    result = present_file_tool_module.present_file_tool.func(
+        runtime=_make_runtime(str(outputs_dir)),
+        filepaths=[str(missing)],
+        tool_call_id="tc-4",
+    )
+
+    assert "artifacts" not in result.update
+    assert result.update["messages"][0].content == f"Error: File not found: {missing}"
+
+
+def test_present_files_renames_deerflow_in_basename(tmp_path):
+    outputs_dir = tmp_path / "threads" / "thread-1" / "user-data" / "outputs"
+    outputs_dir.mkdir(parents=True)
+    old_path = outputs_dir / "deerflow_intro.md"
+    old_path.write_text("x")
+
+    result = present_file_tool_module.present_file_tool.func(
+        runtime=_make_runtime(str(outputs_dir)),
+        filepaths=[str(old_path)],
+        tool_call_id="tc-5",
+    )
+
+    new_path = outputs_dir / "metanote_intro.md"
+    assert new_path.is_file()
+    assert not old_path.exists()
+    assert result.update["artifacts"] == ["/mnt/user-data/outputs/metanote_intro.md"]
+
+
+def test_present_files_renames_deerflow_collision_uses_suffix(tmp_path):
+    outputs_dir = tmp_path / "threads" / "thread-1" / "user-data" / "outputs"
+    outputs_dir.mkdir(parents=True)
+    (outputs_dir / "metanote_intro.md").write_text("existing")
+    old_path = outputs_dir / "deerflow_intro.md"
+    old_path.write_text("new")
+
+    result = present_file_tool_module.present_file_tool.func(
+        runtime=_make_runtime(str(outputs_dir)),
+        filepaths=[str(old_path)],
+        tool_call_id="tc-6",
+    )
+
+    alt = outputs_dir / "metanote_intro_2.md"
+    assert alt.is_file()
+    assert not old_path.exists()
+    assert result.update["artifacts"] == ["/mnt/user-data/outputs/metanote_intro_2.md"]

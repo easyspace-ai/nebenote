@@ -85,27 +85,17 @@ export function MessageGroup({
       {aboveLastToolCallSteps.length > 0 && (
         <Button
           key="above"
-          className="w-full items-start justify-start text-left"
+          className="hover:bg-muted/60 bg-muted/30 text-muted-foreground/70 hover:text-muted-foreground h-7 w-full justify-between rounded-md px-3 text-xs font-medium transition-colors"
           variant="ghost"
           onClick={() => setShowAbove(!showAbove)}
         >
-          <ChainOfThoughtStep
-            label={
-              <span className="opacity-60">
-                {showAbove
-                  ? t.toolCalls.lessSteps
-                  : t.toolCalls.moreSteps(aboveLastToolCallSteps.length)}
-              </span>
-            }
-            icon={
-              <ChevronUp
-                className={cn(
-                  "size-4 opacity-60 transition-transform duration-200",
-                  showAbove ? "rotate-180" : "",
-                )}
-              />
-            }
-          ></ChainOfThoughtStep>
+          <span>{showAbove ? t.toolCalls.lessSteps : t.toolCalls.moreSteps(aboveLastToolCallSteps.length)}</span>
+          <ChevronUp
+            className={cn(
+              "size-3.5 transition-transform duration-200",
+              showAbove ? "rotate-180" : "",
+            )}
+          />
         </Button>
       )}
       {lastToolCallStep && (

@@ -39,51 +39,49 @@ export function TodoList({
   return (
     <div
       className={cn(
-        "flex h-fit w-full origin-bottom translate-y-4 flex-col overflow-hidden rounded-t-xl border border-b-0 bg-white backdrop-blur-sm transition-all duration-200 ease-out",
+        "flex h-fit w-full origin-bottom translate-y-4 flex-col overflow-hidden rounded-t-lg border border-b-0 bg-background/80 backdrop-blur-sm transition-all duration-200",
         hidden ? "pointer-events-none translate-y-8 opacity-0" : "",
         className,
       )}
     >
       <header
         className={cn(
-          "bg-accent flex min-h-8 shrink-0 cursor-pointer items-center justify-between px-4 text-sm transition-all duration-300 ease-out",
+          "hover:bg-muted/60 bg-muted/40 flex h-7 shrink-0 cursor-pointer items-center justify-between px-3 text-xs transition-colors",
         )}
         onClick={handleToggle}
       >
-        <div className="text-muted-foreground">
-          <div className="flex items-center justify-center gap-2">
-            <ListTodoIcon className="size-4" />
-            <div>To-dos</div>
+        <div className="text-muted-foreground/80">
+          <div className="flex items-center justify-center gap-1.5">
+            <ListTodoIcon className="size-3.5" />
+            <span className="font-medium">To-dos</span>
           </div>
         </div>
-        <div>
-          <ChevronUpIcon
-            className={cn(
-              "text-muted-foreground size-4 transition-transform duration-300 ease-out",
-              collapsed ? "" : "rotate-180",
-            )}
-          />
-        </div>
+        <ChevronUpIcon
+          className={cn(
+            "text-muted-foreground/60 size-3.5 transition-transform duration-200",
+            collapsed ? "" : "rotate-180",
+          )}
+        />
       </header>
       <main
         className={cn(
-          "bg-accent flex grow px-2 transition-all duration-300 ease-out",
-          collapsed ? "h-0 pb-3" : "h-28 pb-4",
+          "bg-muted/30 flex grow px-2 transition-all duration-200",
+          collapsed ? "h-0 pb-2" : "h-24 pb-3",
         )}
       >
-        <QueueList className="bg-background mt-0 w-full rounded-t-xl">
+        <QueueList className="bg-background mt-0 w-full rounded-t-lg">
           {todos.map((todo, i) => (
             <QueueItem key={i + (todo.content ?? "")}>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <QueueItemIndicator
                   className={
-                    todo.status === "in_progress" ? "bg-primary/70" : ""
+                    todo.status === "in_progress" ? "bg-foreground/40" : ""
                   }
                   completed={todo.status === "completed"}
                 />
                 <QueueItemContent
                   className={
-                    todo.status === "in_progress" ? "text-primary/70" : ""
+                    todo.status === "in_progress" ? "text-foreground/70" : ""
                   }
                   completed={todo.status === "completed"}
                 >

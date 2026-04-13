@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { type PromptInputMessage } from "@/components/ai-elements/prompt-input";
@@ -28,11 +28,36 @@ import { useNotification } from "@/core/notification/hooks";
 import { useThreadSettings } from "@/core/settings";
 import { useThreadStream } from "@/core/threads/hooks";
 import { textOfMessage } from "@/core/threads/utils";
+import { getAPIClient } from "@/core/api";
 import { env } from "@/env";
 import { cn } from "@/lib/utils";
 
+function isThreadNotFoundError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+
+  const status = (error as { status?: number }).status;
+  if (status === 404) {
+    return true;
+  }
+
+  const responseStatus = (error as { response?: { status?: number } }).response?.status;
+  if (responseStatus === 404) {
+    return true;
+  }
+
+  const message =
+    (error as { message?: string }).message ??
+    (error as { response?: { message?: string } }).response?.message ??
+    "";
+
+  return /thread .* not found|not found/i.test(message);
+}
+
 export default function NotebookChatPage() {
   const params = useParams();
+  const router = useRouter();
   const notebookId = params.notebookId as string;
   const threadIdFromRoute = params.threadId as string;
   const { t } = useI18n();
@@ -51,6 +76,24 @@ export default function NotebookChatPage() {
     if (!threadIdFromRoute) return;
     setLastNotebookThread(notebookId, threadIdFromRoute);
   }, [notebookId, threadIdFromRoute]);
+
+  useEffect(() => {
+    let active = true;
+    if (!threadIdFromRoute || isMock) return;
+
+    void getAPIClient(isMock)
+      .threads.get(threadIdFromRoute)
+      .catch((error: unknown) => {
+        if (!active) return;
+        if (isThreadNotFoundError(error)) {
+          router.replace(`/workspace/notebooks/${notebookId}/chats`);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isMock, notebookId, router, threadIdFromRoute]);
 
   const { showNotification } = useNotification();
 
