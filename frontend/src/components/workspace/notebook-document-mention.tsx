@@ -103,7 +103,7 @@ export function NotebookDocumentMention({
                   key={doc.doc_id}
                   value={doc.doc_id}
                   onSelect={() => handleSelect(doc)}
-                  className="cursor-pointer"
+                  className="cursor-pointer data-[selected=true]:bg-muted data-[selected=true]:text-foreground"
                 >
                   <FileTextIcon className="mr-2 size-4 text-muted-foreground" />
                   <div className="flex-1 min-w-0">

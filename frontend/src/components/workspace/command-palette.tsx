@@ -78,7 +78,7 @@ export function CommandPalette() {
         <CommandList>
           <CommandEmpty>{t.shortcuts.noResults}</CommandEmpty>
           <CommandGroup heading={t.shortcuts.actions}>
-            <CommandItem onSelect={handleNewChat}>
+            <CommandItem onSelect={handleNewChat} className="data-[selected=true]:bg-muted data-[selected=true]:text-foreground">
               <MessageSquarePlusIcon className="mr-2 h-4 w-4" />
               {t.sidebar.newChat}
               <CommandShortcut>
@@ -86,12 +86,12 @@ export function CommandPalette() {
                 {shiftKey}N
               </CommandShortcut>
             </CommandItem>
-            <CommandItem onSelect={handleOpenSettings}>
+            <CommandItem onSelect={handleOpenSettings} className="data-[selected=true]:bg-muted data-[selected=true]:text-foreground">
               <SettingsIcon className="mr-2 h-4 w-4" />
               {t.common.settings}
               <CommandShortcut>{metaKey},</CommandShortcut>
             </CommandItem>
-            <CommandItem onSelect={handleShowShortcuts}>
+            <CommandItem onSelect={handleShowShortcuts} className="data-[selected=true]:bg-muted data-[selected=true]:text-foreground">
               <KeyboardIcon className="mr-2 h-4 w-4" />
               {t.shortcuts.keyboardShortcuts}
               <CommandShortcut>{metaKey}/</CommandShortcut>

@@ -80,10 +80,13 @@ export function groupMessages<T>(
         if (open) {
           open.messages.push(message);
         } else {
-          console.error(
-            "Unexpected tool message outside a processing group",
-            message,
-          );
+          // Create a new processing group if none exists (can happen with
+          // abnormal message sequencing from the backend) instead of just erroring
+          groups.push({
+            id: message.id,
+            type: "assistant:processing",
+            messages: [message],
+          });
         }
       }
       continue;

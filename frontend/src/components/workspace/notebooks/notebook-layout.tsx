@@ -78,43 +78,41 @@ export function NotebookLayout({
   rightPanel,
   topBar,
 }: NotebookLayoutProps) {
-  const [state, setState] = useState<PanelState>(DEFAULT_STATE);
-  const [mounted, setMounted] = useState(false);
-
-  // Load saved state from localStorage
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}-${notebookId}`);
-      if (saved) {
-        const parsed = JSON.parse(saved) as PanelState;
-        const nextLeftSize = Number.isFinite(parsed.leftSize)
-          ? clamp(parsed.leftSize, LEFT_MIN, LEFT_MAX)
-          : DEFAULT_STATE.leftSize;
-        const nextRightSize = Number.isFinite(parsed.rightSize)
-          ? clamp(parsed.rightSize, RIGHT_MIN, RIGHT_MAX)
-          : DEFAULT_STATE.rightSize;
-        setState((prev) => ({
-          ...prev,
-          ...parsed,
-          leftSize: nextLeftSize,
-          rightSize: nextRightSize,
-        }));
+  // Lazy initialize state from localStorage on client first render
+  // This prevents hydration mismatch because the initial render
+  // already has the correct sizes from localStorage
+  const [state, setState] = useState<PanelState>(() => {
+    const initial = { ...DEFAULT_STATE };
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem(`${STORAGE_KEY}-${notebookId}`);
+        if (saved) {
+          const parsed = JSON.parse(saved) as PanelState;
+          initial.leftOpen = parsed.leftOpen ?? initial.leftOpen;
+          initial.rightOpen = parsed.rightOpen ?? initial.rightOpen;
+          initial.leftSize = Number.isFinite(parsed.leftSize)
+            ? clamp(parsed.leftSize, LEFT_MIN, LEFT_MAX)
+            : initial.leftSize;
+          initial.rightSize = Number.isFinite(parsed.rightSize)
+            ? clamp(parsed.rightSize, RIGHT_MIN, RIGHT_MAX)
+            : initial.rightSize;
+        }
+      } catch {
+        // Ignore localStorage errors
       }
-    } catch {
-      // Ignore localStorage errors
     }
-    setMounted(true);
-  }, [notebookId]);
+    return initial;
+  });
+  const [mounted, setMounted] = useState(typeof window !== 'undefined');
 
-  // Save state to localStorage
+  // Save state to localStorage when it changes
   useEffect(() => {
-    if (!mounted) return;
     try {
       localStorage.setItem(`${STORAGE_KEY}-${notebookId}`, JSON.stringify(state));
     } catch {
       // Ignore localStorage errors
     }
-  }, [state, notebookId, mounted]);
+  }, [state, notebookId]);
 
   const toggleLeft = useCallback(() => {
     setState((prev) => {
@@ -158,14 +156,6 @@ export function NotebookLayout({
     setRightSize,
   };
 
-  if (!mounted) {
-    return (
-      <div className="flex h-full w-full items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
-      </div>
-    );
-  }
-
   // Calculate percentages
   // Left and right each get their configured size if open, plus space for the two resize handles
   const leftPercentage = state.leftOpen ? state.leftSize : 0;
@@ -174,85 +164,83 @@ export function NotebookLayout({
 
   return (
     <NotebookLayoutContext.Provider value={contextValue}>
-      <div className="flex h-full w-full flex-col overflow-hidden bg-background">
+      <div className="flex h-full w-full flex-col overflow-hidden bg-background p-3 gap-3">
         {topBar && <div className="shrink-0">{topBar}</div>}
-        <div className="flex min-h-0 flex-1">
-          <ResizablePanelGroup
-            orientation="horizontal"
-            className="flex min-h-0 min-w-0 flex-1 gap-0"
-          >
-            {/* Left Panel */}
-            {state.leftOpen && (
-              <ResizablePanel
-                id="left-panel"
-                defaultSize={`${leftPercentage}%`}
-                minSize={`${LEFT_MIN}%`}
-                maxSize={`${LEFT_MAX}%`}
-                onResize={(panelSize) => {
-                  const percentage = parsePanelPercentage(panelSize);
-                  if (percentage == null) return;
-                  setLeftSize(clamp(percentage, LEFT_MIN, LEFT_MAX));
-                }}
-              >
-                <div className="flex h-full min-w-0 flex-col border-r border-border bg-sidebar">
-                  {leftPanel}
-                </div>
-              </ResizablePanel>
-            )}
-            {state.leftOpen && (
-              <ResizableHandle
-                className={cn(
-                   "group relative flex w-2 items-center justify-center bg-transparent transition-colors hover:bg-muted/50 data-[dragging=true]:bg-muted/70",
-                  )}
-                >
-                  <div className="z-10 flex h-12 w-2 items-center justify-center rounded-full border border-border/60 bg-background opacity-0 shadow-xs transition-opacity group-hover:opacity-100 group-data-[dragging=true]:opacity-100">
-                    <GripVerticalIcon className="size-2.5 text-muted-foreground" />
-                  </div>
-                </ResizableHandle>
-              )}
-
-            {/* Center Panel */}
+        <ResizablePanelGroup
+          orientation="horizontal"
+          className="flex min-h-0 min-w-0 flex-1 gap-3"
+        >
+          {/* Left Panel */}
+          {state.leftOpen && (
             <ResizablePanel
-              id="center-panel"
-              defaultSize={`${centerPercentage}%`}
-              minSize={`${CENTER_MIN}%`}
+              id="left-panel"
+              defaultSize={`${leftPercentage}%`}
+              minSize={`${LEFT_MIN}%`}
+              maxSize={`${LEFT_MAX}%`}
+              onResize={(panelSize) => {
+                const percentage = parsePanelPercentage(panelSize);
+                if (percentage == null) return;
+                setLeftSize(clamp(percentage, LEFT_MIN, LEFT_MAX));
+              }}
             >
-              <div className="flex h-full min-w-0 flex-col overflow-hidden bg-transparent">
-                {children}
+              <div className="flex h-full min-w-0 flex-col rounded-xl border border-border bg-sidebar">
+                {leftPanel}
               </div>
             </ResizablePanel>
-
-            {/* Right Panel */}
-            {state.rightOpen && (
-              <ResizableHandle
-                className={cn(
-                  "group relative flex w-2 items-center justify-center bg-transparent transition-colors hover:bg-muted/50 data-[dragging=true]:bg-muted/70",
-                )}
+          )}
+          {state.leftOpen && (
+            <ResizableHandle
+              className={cn(
+                 "group relative flex w-0 items-center justify-center bg-transparent transition-colors hover:bg-transparent data-[dragging=true]:bg-transparent",
+              )}
               >
                 <div className="z-10 flex h-12 w-2 items-center justify-center rounded-full border border-border/60 bg-background opacity-0 shadow-xs transition-opacity group-hover:opacity-100 group-data-[dragging=true]:opacity-100">
                   <GripVerticalIcon className="size-2.5 text-muted-foreground" />
                 </div>
               </ResizableHandle>
             )}
-            {state.rightOpen && (
-              <ResizablePanel
-                id="right-panel"
-                defaultSize={`${rightPercentage}%`}
-                minSize={`${RIGHT_MIN}%`}
-                maxSize={`${RIGHT_MAX}%`}
-                onResize={(panelSize) => {
-                  const percentage = parsePanelPercentage(panelSize);
-                  if (percentage == null) return;
-                  setRightSize(clamp(percentage, RIGHT_MIN, RIGHT_MAX));
-                }}
-              >
-                <div className="flex h-full min-w-0 flex-col border-l border-border bg-sidebar">
-                  {rightPanel}
-                </div>
-              </ResizablePanel>
-            )}
-          </ResizablePanelGroup>
-        </div>
+
+          {/* Center Panel */}
+          <ResizablePanel
+            id="center-panel"
+            defaultSize={`${centerPercentage}%`}
+            minSize={`${CENTER_MIN}%`}
+          >
+            <div className="flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-background">
+              {children}
+            </div>
+          </ResizablePanel>
+
+          {/* Right Panel */}
+          {state.rightOpen && (
+            <ResizableHandle
+              className={cn(
+                "group relative flex w-0 items-center justify-center bg-transparent transition-colors hover:bg-transparent data-[dragging=true]:bg-transparent",
+              )}
+            >
+              <div className="z-10 flex h-12 w-2 items-center justify-center rounded-full border border-border/60 bg-background opacity-0 shadow-xs transition-opacity group-hover:opacity-100 group-data-[dragging=true]:opacity-100">
+                <GripVerticalIcon className="size-2.5 text-muted-foreground" />
+              </div>
+            </ResizableHandle>
+          )}
+          {state.rightOpen && (
+            <ResizablePanel
+              id="right-panel"
+              defaultSize={`${rightPercentage}%`}
+              minSize={`${RIGHT_MIN}%`}
+              maxSize={`${RIGHT_MAX}%`}
+              onResize={(panelSize) => {
+                const percentage = parsePanelPercentage(panelSize);
+                if (percentage == null) return;
+                setRightSize(clamp(percentage, RIGHT_MIN, RIGHT_MAX));
+              }}
+            >
+              <div className="flex h-full min-w-0 flex-col rounded-xl border border-border bg-sidebar">
+                {rightPanel}
+              </div>
+            </ResizablePanel>
+          )}
+        </ResizablePanelGroup>
       </div>
     </NotebookLayoutContext.Provider>
   );

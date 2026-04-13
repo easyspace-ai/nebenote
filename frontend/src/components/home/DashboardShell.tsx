@@ -93,10 +93,10 @@ export function DashboardShell({
               <Package className="h-4 w-4 shrink-0 opacity-90" />
               <span>笔记本</span>
             </Link>
-            <Link href="/skills" className={navRowClass(isSkillsActive)}>
+            {/* <Link href="/skills" className={navRowClass(isSkillsActive)}>
               <Lightbulb className="h-4 w-4 shrink-0 opacity-90" />
               <span>技能</span>
-            </Link>
+            </Link> */}
           </div>
 
           <div className="border-sidebar-border/40 mt-4 flex min-h-0 flex-1 flex-col border-t pt-4">

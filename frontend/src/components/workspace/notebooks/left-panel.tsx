@@ -277,8 +277,8 @@ function ThreadList({ notebookId }: { notebookId: string }) {
           className={cn(
             "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors",
             isChatsRoot
-              ? "bg-accent/15 text-foreground font-medium"
-              : "hover:bg-muted/80 text-muted-foreground"
+              ? "bg-accent/10 text-foreground font-medium"
+              : "hover:bg-muted/40 text-muted-foreground"
           )}
         >
           <MessageSquare className="h-4 w-4 shrink-0 opacity-80" />
@@ -292,12 +292,12 @@ function ThreadList({ notebookId }: { notebookId: string }) {
             <button
               type="button"
               onClick={() => goToThread(tid)}
-              className={cn(
-                "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors group",
-                active
-                  ? "bg-accent/15 text-foreground font-medium"
-                  : "hover:bg-muted/80 text-muted-foreground"
-              )}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors group",
+                  active
+                    ? "bg-accent/10 text-foreground font-medium"
+                    : "hover:bg-muted/40 text-muted-foreground"
+                )}
             >
               <MessageSquare className="h-4 w-4 shrink-0 opacity-80" />
               <span className="min-w-0 flex-1 truncate">对话 · {tid.slice(0, 8)}</span>

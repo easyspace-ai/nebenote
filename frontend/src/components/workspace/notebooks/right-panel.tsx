@@ -160,7 +160,7 @@ function GenerationCard({
   description: string;
 }) {
   return (
-    <button className="w-full rounded-xl border border-border/50 bg-[#ECECEC]/90 p-3 text-left transition-colors hover:bg-[#E5E5E5]">
+    <button className="w-full rounded-xl border border-border/50 bg-muted/60 p-3 text-left transition-colors hover:bg-muted/80">
       <div className="flex items-center gap-2">
         <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary">
           {icon}
