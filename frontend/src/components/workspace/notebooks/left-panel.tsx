@@ -251,7 +251,9 @@ function ThreadList({ notebookId }: { notebookId: string }) {
 
   const { data: notebook, isLoading } = useNotebook(notebookId);
 
-  const threadIds = notebook?.thread_ids ?? [];
+  // thread_ids from backend: [...oldest, newest]
+  // Reverse to show newest at TOP
+  const threadIds = [...(notebook?.thread_ids ?? [])].reverse();
 
   const goToThread = (threadId: string) => {
     setLastNotebookThread(notebookId, threadId);
@@ -292,12 +294,12 @@ function ThreadList({ notebookId }: { notebookId: string }) {
             <button
               type="button"
               onClick={() => goToThread(tid)}
-                className={cn(
-                  "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors group",
-                  active
-                    ? "bg-accent/10 text-foreground font-medium"
-                    : "hover:bg-muted/40 text-muted-foreground"
-                )}
+              className={cn(
+                "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors group",
+                active
+                  ? "bg-muted text-foreground font-medium"
+                  : "hover:bg-muted text-muted-foreground"
+              )}
             >
               <MessageSquare className="h-4 w-4 shrink-0 opacity-80" />
               <span className="min-w-0 flex-1 truncate">对话 · {tid.slice(0, 8)}</span>

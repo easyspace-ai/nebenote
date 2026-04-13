@@ -6,13 +6,17 @@ import {
   FileText,
   MessageSquare,
   Plus,
+  Search,
   Trash2,
   Upload,
+  X,
 } from "lucide-react";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useI18n } from "@/core/i18n/hooks";
@@ -45,6 +49,53 @@ export function NotebookSidebarContent() {
   const createThread = useCreateThread(notebookId);
 
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+
+  const filteredDocuments = useMemo(() => {
+    if (!documents) return [];
+    if (!searchQuery) return documents;
+    return documents.filter(doc => 
+      doc.title.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [documents, searchQuery]);
+
+  const handleFileSelect = useCallback((files: FileList | null) => {
+    if (!files?.length) return;
+    setUploadFiles(Array.from(files));
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      setUploadFiles(prev => [...prev, ...files]);
+    }
+  }, []);
+
+  const handleRemoveFile = useCallback((index: number) => {
+    setUploadFiles(prev => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const handleUpload = useCallback(async () => {
+    if (uploadFiles.length === 0) return;
+
+    try {
+      for (const file of uploadFiles) {
+        await uploadDocument.mutateAsync({ file, title: file.name });
+      }
+      setUploadFiles([]);
+      setUploadDialogOpen(false);
+    } catch (error) {
+      console.error(error);
+    }
+  }, [uploadDocument, uploadFiles]);
 
   const notebookThreads = useMemo(() => {
     const threadMap = new Map(
@@ -67,24 +118,6 @@ export function NotebookSidebarContent() {
       console.error(error);
     }
   }, [createThread, notebookId, router]);
-
-  const handleFileSelect = useCallback((files: FileList | null) => {
-    if (!files?.length) return;
-    setUploadFiles(Array.from(files));
-  }, []);
-
-  const handleUpload = useCallback(async () => {
-    if (uploadFiles.length === 0) return;
-
-    try {
-      for (const file of uploadFiles) {
-        await uploadDocument.mutateAsync({ file, title: file.name });
-      }
-      setUploadFiles([]);
-    } catch (error) {
-      console.error(error);
-    }
-  }, [uploadDocument, uploadFiles]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
