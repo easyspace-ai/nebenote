@@ -50,6 +50,7 @@ export function NotebookSidebarContent() {
 
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchVisible, setSearchVisible] = useState(false);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
 
   const filteredDocuments = useMemo(() => {
@@ -223,27 +224,45 @@ export function NotebookSidebarContent() {
           value="uploads"
           className="mt-0 flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden"
         >
-          {/* 搜索和添加按钮栏 */}
-          <div className="flex items-center gap-2 py-4">
-            <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-sidebar-foreground/50" />
-              <Input
-                type="search"
-                placeholder="搜索"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-9 w-full rounded-xl border-sidebar-border/70 bg-sidebar pl-9 pr-3 text-sm placeholder:text-sidebar-foreground/50 focus:border-sidebar-accent focus:ring-sidebar-accent/20"
-              />
+          {/* 搜索和添加按钮 - 参考设计图：两个图标在右上角 */}
+          <div className="flex flex-col gap-2 py-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-sidebar-foreground">
+                资料
+              </span>
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 rounded-lg p-0 text-sidebar-foreground/70 hover:bg-sidebar-accent/10 hover:text-sidebar-foreground"
+                  onClick={() => setSearchVisible(!searchVisible)}
+                >
+                  <Search className="size-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 rounded-lg p-0 text-sidebar-foreground/70 hover:bg-sidebar-accent/10 hover:text-sidebar-foreground"
+                  onClick={() => setUploadDialogOpen(true)}
+                >
+                  <Plus className="size-4" />
+                </Button>
+              </div>
             </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-9 w-9 shrink-0 rounded-xl p-0 text-sidebar-foreground/70 hover:bg-sidebar-accent/10 hover:text-sidebar-foreground"
-              onClick={() => setUploadDialogOpen(true)}
-            >
-              <Plus className="size-4" />
-            </Button>
+            {searchVisible && (
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-sidebar-foreground/50" />
+                <Input
+                  type="search"
+                  placeholder="搜索资料..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="h-9 w-full rounded-xl border-sidebar-border/70 bg-sidebar pl-9 pr-3 text-sm placeholder:text-sidebar-foreground/50 focus:border-sidebar-accent focus:ring-sidebar-accent/20"
+                />
+              </div>
+            )}
           </div>
 
           <ScrollArea className="min-h-0 flex-1">
@@ -322,13 +341,15 @@ export function NotebookSidebarContent() {
 
             {/* 待上传文件列表 */}
             {uploadFiles.length > 0 && (
-              <div className="max-h-[200px] space-y-2 overflow-y-auto rounded-xl border border-sidebar-border/70 bg-sidebar p-3">
+              <div className="max-h-[200px] space-y-2 overflow-y-auto rounded-2xl border border-sidebar-border/70 bg-sidebar p-3">
                 {uploadFiles.map((file, index) => (
                   <div
                     key={`${file.name}-${file.lastModified}-${index}`}
-                    className="flex items-center gap-2 rounded-lg bg-sidebar-background/50 px-3 py-2"
+                    className="flex items-center gap-3 rounded-xl bg-sidebar-background/50 px-3 py-3"
                   >
-                    <FileText className="size-4 shrink-0 text-sidebar-foreground/60" />
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-green-500/10 text-green-500">
+                      <FileText className="size-4" />
+                    </div>
                     <span className="min-w-0 flex-1 truncate text-sm text-sidebar-foreground">
                       {file.name}
                     </span>
@@ -345,7 +366,7 @@ export function NotebookSidebarContent() {
                 ))}
                 <Button
                   type="button"
-                  className="mt-2 h-9 w-full"
+                  className="mt-3 h-10 w-full rounded-xl"
                   onClick={handleUpload}
                   disabled={uploadDocument.isPending}
                 >
@@ -369,11 +390,10 @@ function NotebookDocumentRow({
   dateLocale: typeof zhCN;
   onDelete: () => void;
 }) {
-  // 根据文件类型选择图标（简单判断）
+  // 提取文件扩展名，给不同类型显示不同图标
   const getFileIcon = () => {
-    const ext = doc.title.split('.').pop()?.toLowerCase();
-    // 可以在这里扩展更多图标，目前统一用FileText
-    return <FileText className="size-4" />;
+    // 可以扩展更多类型，现在统一用FileText
+    return <FileText className="size-4 shrink-0" />;
   };
 
   return (
@@ -384,9 +404,7 @@ function NotebookDocumentRow({
         "text-sidebar-foreground/70 hover:bg-sidebar-accent/10 hover:text-sidebar-foreground"
       )}
     >
-      <div className="bg-sidebar-accent/10 text-sidebar-accent flex size-8 shrink-0 items-center justify-center rounded-lg">
-        {getFileIcon()}
-      </div>
+      {getFileIcon()}
       <span className="min-w-0 flex-1 truncate text-sm font-medium text-sidebar-foreground">
         {doc.title}
       </span>

@@ -12,7 +12,7 @@ ifeq ($(OS),Windows_NT)
     # Run repo shell scripts through Git Bash when Make is launched from cmd.exe / PowerShell.
     RUN_WITH_GIT_BASH = call scripts\run-with-git-bash.cmd
 else
-    PYTHON ?= python3
+    PYTHON ?= python3.12
     RUN_WITH_GIT_BASH =
 endif
 
