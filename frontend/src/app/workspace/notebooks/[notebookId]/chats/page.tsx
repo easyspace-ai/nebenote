@@ -4,7 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 import { useCreateThread, useNotebook } from "@/core/notebook/hooks";
-import { getLastNotebookThread } from "@/core/notebook/session";
+import { clearLastNotebookThread, getLastNotebookThread } from "@/core/notebook/session";
 
 export default function NotebookNewChatPage() {
   const params = useParams();
@@ -23,9 +23,14 @@ export default function NotebookNewChatPage() {
       });
       return;
     }
-    const lastThreadId = getLastNotebookThread(notebookId);
-    const targetThreadId =
-      lastThreadId && threadIds.includes(lastThreadId) ? lastThreadId : threadIds[0];
+    let lastThreadId = getLastNotebookThread(notebookId);
+    // If last saved thread doesn't exist in the list, it was deleted
+    // Clear it and fall back to the first available thread
+    if (lastThreadId && !threadIds.includes(lastThreadId)) {
+      clearLastNotebookThread(notebookId);
+      lastThreadId = null;
+    }
+    const targetThreadId = lastThreadId ? lastThreadId : threadIds[0];
     router.replace(`/workspace/notebooks/${notebookId}/chats/${targetThreadId}`);
   }, [createThread, isLoading, notebook, notebookId, router]);
 
